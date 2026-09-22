@@ -102,18 +102,35 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           shopId: shop.id,
           action: "BLOCK",
           status: "EXECUTED",
-          session: {
-            OR: [
-              { sessionKey },
-              { id: sessionKey },
-            ],
-          },
+          OR: [
+            { session: { sessionKey } },
+            { session: { id: sessionKey } },
+            { sessionId: sessionKey },
+            { metadata: { contains: sessionKey } },
+          ],
         },
         orderBy: { createdAt: "desc" },
       });
-      if (manualBlockAction) {
+
+      const flaggedSession = await prisma.trafficSession.findFirst({
+        where: {
+          shopId: shop.id,
+          isFlagged: true,
+          flaggedReason: { contains: "Manually blocked" },
+          OR: [
+            { sessionKey },
+            { id: sessionKey },
+          ],
+        },
+        orderBy: { lastSeenAt: "desc" },
+      });
+
+      if (manualBlockAction || flaggedSession) {
         isManuallyBlocked = true;
-        manualBlockReason = manualBlockAction.reason || "Session manually blocked by merchant via Traffic Investigation";
+        manualBlockReason =
+          manualBlockAction?.reason ||
+          flaggedSession?.flaggedReason ||
+          "Session manually blocked by merchant via Traffic Investigation";
       }
     }
 

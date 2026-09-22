@@ -3,9 +3,9 @@
   Intercepts Add to Cart and Checkout when Protection Mode is set to CHALLENGE
 {% endcomment %}
 
-{% assign current_backend_url = "https://graduates-compatibility-supported-graduate.trycloudflare.com" %}
+{% assign current_backend_url = "https://talk-raise-trivia-guided.trycloudflare.com" %}
 {% assign app_endpoint = block.settings.app_url %}
-{% if app_endpoint == blank or app_endpoint contains "individual-runs-whose-suite" or app_endpoint contains "cafe-eugene" or app_endpoint contains "polymer-plots" or app_endpoint contains "america-england" or app_endpoint != current_backend_url %}
+{% if app_endpoint == blank or app_endpoint contains "graduates-compatibility" or app_endpoint contains "individual-runs" or app_endpoint contains "cafe-eugene" or app_endpoint contains "polymer-plots" or app_endpoint contains "america-england" %}
   {% assign app_endpoint = current_backend_url %}
 {% endif %}
 
@@ -26,7 +26,7 @@
       "type": "text",
       "id": "app_url",
       "label": "Traffiq App Endpoint",
-      "default": "https://graduates-compatibility-supported-graduate.trycloudflare.com",
+      "default": "https://talk-raise-trivia-guided.trycloudflare.com",
       "info": "The public URL of your Traffiq app backend"
     }
   ]

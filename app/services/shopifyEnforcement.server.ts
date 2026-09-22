@@ -63,18 +63,31 @@ export async function validateCheckoutSession(
   // Check if session has an explicit manual BLOCK action executed by merchant
   const manualBlock = await prisma.protectionAction.findFirst({
     where: {
-      sessionId: session.id,
+      shopId,
       action: "BLOCK",
       status: "EXECUTED",
+      OR: [
+        { sessionId: session.id },
+        { session: { sessionKey: session.sessionKey } },
+        { metadata: { contains: session.sessionKey } },
+      ],
     },
     orderBy: { createdAt: "desc" },
   });
 
-  if (manualBlock) {
+  const isSessionFlaggedAsBlocked =
+    session.isFlagged &&
+    (session.flaggedReason?.includes("Manually blocked") ||
+      session.aiRecommendation?.includes("manually blocked"));
+
+  if (manualBlock || isSessionFlaggedAsBlocked) {
     return {
       allowed: false,
       decision: "BLOCK",
-      reason: manualBlock.reason || "Session manually blocked by merchant via Traffic Investigation.",
+      reason:
+        manualBlock?.reason ||
+        session.flaggedReason ||
+        "Session manually blocked by merchant via Traffic Investigation.",
       errors: [
         {
           localizedMessage: "Access to checkout is restricted for this session.",

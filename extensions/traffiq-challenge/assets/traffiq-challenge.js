@@ -3,7 +3,7 @@
   window.__TRAFFIQ_CHALLENGE_INITIALIZED__ = true;
 
   var KEY = "tq_challenge_verified";
-  var TUNNEL = "https://graduates-compatibility-supported-graduate.trycloudflare.com";
+  var TUNNEL = "https://talk-raise-trivia-guided.trycloudflare.com";
 
   try {
     if (window.location.search.indexOf("test_challenge") !== -1 || window.location.search.indexOf("simulate_high_severity") !== -1) {
@@ -28,6 +28,7 @@
   // Detect and override any stale tunnel endpoints
   if (
     !appUrl ||
+    appUrl.indexOf("graduates-compatibility") !== -1 ||
     appUrl.indexOf("individual-runs-whose-suite") !== -1 ||
     appUrl.indexOf("cafe-eugene") !== -1 ||
     appUrl.indexOf("polymer-plots") !== -1 ||

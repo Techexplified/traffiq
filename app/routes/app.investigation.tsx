@@ -93,17 +93,30 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         action: "BLOCK",
         status: "EXECUTED",
         reason: "Manually blocked by merchant via Traffic Investigation",
-        metadata: JSON.stringify({ manual: true, timestamp: new Date().toISOString() }),
+        metadata: JSON.stringify({
+          manual: true,
+          sessionKey: sessionRecord.sessionKey,
+          timestamp: new Date().toISOString(),
+        }),
       },
     });
 
-    // 2. Mark session as flagged with manual block note
-    const updated = await prisma.trafficSession.update({
-      where: { id: sessionRecord.id },
+    // 2. Mark session and any sessions sharing this sessionKey as flagged and blocked
+    await prisma.trafficSession.updateMany({
+      where: {
+        shopId,
+        OR: [
+          { id: sessionRecord.id },
+          { sessionKey: sessionRecord.sessionKey },
+        ],
+      },
       data: {
         isFlagged: true,
         flaggedReason: "Manually blocked by merchant",
         aiRecommendation: "Session manually blocked by merchant. Block active on storefront and checkout.",
+        riskScore: 99,
+        severity: "CRITICAL",
+        trafficType: "BOT",
       },
     });
 
@@ -126,22 +139,35 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (actionType === "unblock_session") {
-    // 1. Delete BLOCK actions for this session
+    // 1. Delete BLOCK actions for this session or sessionKey
     await prisma.protectionAction.deleteMany({
       where: {
         shopId,
-        sessionId: sessionRecord.id,
+        OR: [
+          { sessionId: sessionRecord.id },
+          { session: { sessionKey: sessionRecord.sessionKey } },
+          { metadata: { contains: sessionRecord.sessionKey } },
+        ],
         action: "BLOCK",
       },
     });
 
-    // 2. Reset session flagged status if not otherwise suspicious
-    const updated = await prisma.trafficSession.update({
-      where: { id: sessionRecord.id },
+    // 2. Reset session flagged status across matching sessions
+    await prisma.trafficSession.updateMany({
+      where: {
+        shopId,
+        OR: [
+          { id: sessionRecord.id },
+          { sessionKey: sessionRecord.sessionKey },
+        ],
+      },
       data: {
-        isFlagged: sessionRecord.riskScore >= 50,
-        flaggedReason: sessionRecord.riskScore >= 50 ? "Suspicious activity detected" : null,
+        isFlagged: false,
+        flaggedReason: null,
         aiRecommendation: null,
+        riskScore: 15,
+        severity: "LOW",
+        trafficType: "HUMAN",
       },
     });
 
