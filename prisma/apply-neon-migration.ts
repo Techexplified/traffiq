@@ -267,9 +267,10 @@ CREATE INDEX IF NOT EXISTS "TrafficSession_shopId_isFlagged_idx" ON "TrafficSess
 `;
 
 async function main() {
-  const connectionString =
-    process.env.DATABASE_URL ||
-    "postgresql://neondb_owner:npg_8NlFrz9LPnHM@ep-icy-recipe-aucukrsj-pooler.c-10.us-east-1.aws.neon.tech/neondb?sslmode=require";
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new Error("Missing DATABASE_URL environment variable. Please set DATABASE_URL.");
+  }
 
   console.log("Connecting to Neon PostgreSQL...");
   const client = new Client({

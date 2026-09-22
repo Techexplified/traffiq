@@ -9,9 +9,11 @@ declare global {
   var pgPoolGlobal: Pool;
 }
 
-let connectionString =
-  process.env.DATABASE_URL ||
-  "postgresql://neondb_owner:npg_8NlFrz9LPnHM@ep-icy-recipe-aucukrsj-pooler.c-10.us-east-1.aws.neon.tech:5432/neondb?sslmode=require";
+let connectionString = process.env.DATABASE_URL;
+
+if (!connectionString) {
+  throw new Error("Missing DATABASE_URL environment variable. Please set DATABASE_URL in your environment.");
+}
 
 // Defensive check: Ensure port 5432 is present if omitted to prevent pg getaddrinfo ENOTFOUND on Windows
 if (connectionString.includes(".neon.tech/") && !connectionString.includes(".neon.tech:")) {
