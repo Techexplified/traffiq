@@ -1,0 +1,280 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Session {
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
+  refreshToken        String?
+  refreshTokenExpires DateTime?
+}
+
+model Shop {
+  id                String             @id @default(cuid())
+  shopDomain        String             @unique
+  shopifyShopId     String?
+  name              String?
+  email             String?
+  currencyCode      String?            @default("USD")
+  planName          String?
+  status            String             @default("ACTIVE") // ACTIVE, UNINSTALLED, INACTIVE
+  isOnboarded       Boolean            @default(false)
+  onboardingStep    Int                @default(1)
+  installedAt       DateTime           @default(now())
+  uninstalledAt     DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  sessions          TrafficSession[]
+  events            TrafficEvent[]
+  alerts            Alert[]
+  protectionRules   ProtectionRule[]
+  protectionActions ProtectionAction[]
+  auditLogs         AuditLog[]
+  aiInsights        AIInsight[]
+  settings          ShopSettings?
+
+  @@index([shopDomain])
+  @@index([status])
+}
+
+model ShopSettings {
+  id                   String   @id @default(cuid())
+  shopId               String   @unique
+  shop                 Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  protectionMode       String   @default("MONITOR") // MONITOR, FLAG, ALERT, CHALLENGE, BLOCK, REDIRECT
+  autoProtect          Boolean  @default(true)
+  emailAlerts          Boolean  @default(true)
+  alertFrequency       String   @default("DAILY") // REALTIME, DAILY, WEEKLY
+  dataRetentionDays    Int      @default(30)
+  anonymousDataSharing Boolean  @default(false)
+  checkoutValidation   Boolean  @default(true)
+  telemetryAccess      Boolean  @default(true)
+  threatDefense        Boolean  @default(true)
+  attributionAccess    Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model TrafficSession {
+  id                String            @id @default(cuid())
+  shopId            String
+  shop              Shop              @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  sessionKey        String            // Client ID or unique session identifier
+  startedAt         DateTime          @default(now())
+  lastSeenAt        DateTime          @default(now())
+  endedAt           DateTime?
+  country           String            @default("Unknown")
+  countryFlag       String            @default("🌐")
+  region            String?
+  city              String?
+  deviceType        String            @default("Desktop")
+  browser           String            @default("Chrome")
+  os                String            @default("Unknown")
+  landingPage       String            @default("/")
+  exitPage          String?
+  referrer          String            @default("")
+  utmSource         String            @default("Direct")
+  utmMedium         String?
+  utmCampaign       String?
+  pageViews         Int               @default(1)
+  requestCount      Int               @default(1)
+  productViews      Int               @default(0)
+  searches          Int               @default(0)
+  addToCartCount    Int               @default(0)
+  checkoutStarted   Boolean           @default(false)
+  purchaseCompleted Boolean           @default(false)
+  totalSpend        Float             @default(0.0)
+  riskScore         Int               @default(0) // 0 - 100
+  trafficType       String            @default("HUMAN") // HUMAN, AUTOMATED, BOT, SUSPICIOUS, HIGH_RISK, UNKNOWN
+  severity          String            @default("LOW") // LOW, MEDIUM, HIGH, CRITICAL
+  isFlagged         Boolean           @default(false)
+  flaggedReason     String?
+  aiRecommendation  String?
+  isDemo            Boolean           @default(false)
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  events            TrafficEvent[]
+  detectionResult   DetectionResult?
+  protectionActions ProtectionAction[]
+
+  @@index([shopId])
+  @@index([shopId, startedAt])
+  @@index([shopId, trafficType])
+  @@index([shopId, riskScore])
+  @@index([shopId, severity])
+  @@index([shopId, isDemo])
+  @@index([shopId, isFlagged])
+  @@index([isFlagged])
+  @@index([startedAt])
+  @@index([riskScore])
+  @@index([trafficType])
+  @@index([severity])
+  @@index([sessionKey])
+  @@index([utmSource])
+  @@index([utmCampaign])
+}
+
+model TrafficEvent {
+  id          String         @id @default(cuid())
+  shopId      String
+  shop        Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  sessionId   String
+  session     TrafficSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  eventType   String         // page_viewed, product_viewed, product_added_to_cart, checkout_started, purchase, search_submitted
+  timestamp   DateTime       @default(now())
+  pageUrl     String
+  productId   String?
+  variantId   String?
+  referrer    String?
+  utmSource   String?
+  utmMedium   String?
+  utmCampaign String?
+  metadata    String?        // JSON string for telemetry signals
+  isDemo      Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+
+  @@index([shopId])
+  @@index([shopId, timestamp])
+  @@index([shopId, isDemo])
+  @@index([sessionId])
+  @@index([timestamp])
+  @@index([eventType])
+}
+
+model DetectionResult {
+  id                String         @id @default(cuid())
+  shopId            String
+  sessionId         String         @unique
+  session           TrafficSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  trafficType       String         // HUMAN, AUTOMATED, BOT, SUSPICIOUS, HIGH_RISK, UNKNOWN
+  riskScore         Int            // 0 - 100
+  confidence        Int            // 0 - 100
+  severity          String         // LOW, MEDIUM, HIGH, CRITICAL
+  reasons           String         // JSON string: DetectionReason[]
+  signals           String         // JSON string: SignalBreakdown[]
+  recommendedAction String         // MONITOR, FLAG, ALERT, BLOCK, CHALLENGE, REDIRECT
+  aiExplanation     String?
+  createdAt         DateTime       @default(now())
+
+  @@index([shopId])
+  @@index([shopId, trafficType])
+  @@index([shopId, riskScore])
+  @@index([trafficType])
+  @@index([riskScore])
+  @@index([createdAt])
+}
+
+model ProtectionRule {
+  id            String   @id @default(cuid())
+  shopId        String
+  shop          Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name          String
+  action        String   // MONITOR, FLAG, ALERT, BLOCK, CHALLENGE, REDIRECT
+  enabled       Boolean  @default(true)
+  threshold     Int      @default(80)
+  configuration String?  // JSON string
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([shopId])
+  @@index([shopId, enabled])
+}
+
+model ProtectionAction {
+  id        String         @id @default(cuid())
+  shopId    String
+  shop      Shop           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  sessionId String
+  session   TrafficSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  action    String         // MONITOR, FLAG, ALERT, BLOCK, CHALLENGE, REDIRECT
+  status    String         @default("EXECUTED") // EXECUTED, SIMULATED, FAILED
+  reason    String
+  metadata  String?        // JSON string
+  createdAt DateTime       @default(now())
+
+  @@index([shopId])
+  @@index([sessionId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Alert {
+  id               String    @id @default(cuid())
+  shopId           String
+  shop             Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  type             String    // TRAFFIC_SPIKE, SUSPICIOUS_TRAFFIC_SPIKE, CONVERSION_DROP, CAMPAIGN_ANOMALY, etc.
+  severity         String    // High, Medium, Low
+  title            String
+  description      String
+  status           String    @default("Active") // Active, Resolved
+  detectedAt       DateTime  @default(now())
+  resolvedAt       DateTime?
+  affectedSessions String?   // e.g. "8,420"
+  increase         String?   // e.g. "220%"
+  botLikelihood    String?   // e.g. "96%"
+  likelySource     String?   // e.g. "Paid Social"
+  countryFlag      String?   // e.g. "🇺🇸"
+  sourcePercent    String?   // e.g. "59% of suspicious traffic"
+  metadata         String?   // JSON string
+  createdAt        DateTime  @default(now())
+
+  @@index([shopId])
+  @@index([shopId, status])
+  @@index([shopId, severity])
+  @@index([status])
+  @@index([severity])
+  @@index([detectedAt])
+}
+
+model AIInsight {
+  id                 String   @id @default(cuid())
+  shopId             String
+  shop               Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  type               String   // WEEKLY_SUMMARY, SPIKE_EXPLANATION, CAMPAIGN_AUDIT
+  title              String
+  summary            String
+  recommendations    String   // JSON string
+  sourceDetectionIds String?  // JSON string
+  createdAt          DateTime @default(now())
+
+  @@index([shopId])
+  @@index([shopId, createdAt])
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  shopId       String
+  shop         Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  actor        String   @default("SYSTEM") // SYSTEM, MERCHANT, ADMIN
+  action       String   // PROTECTION_RULE_ENFORCED, SETTINGS_UPDATED, ALERT_RESOLVED
+  resourceType String   // Session, Rule, Alert, Settings
+  resourceId   String?
+  metadata     String?  // JSON string
+  createdAt    DateTime @default(now())
+
+  @@index([shopId])
+  @@index([shopId, action])
+  @@index([shopId, createdAt])
+  @@index([action])
+  @@index([createdAt])
+}

@@ -1,0 +1,34 @@
+{% comment %}
+  Traffiq Bot Challenge Protection - Theme App Embed
+  Intercepts Add to Cart and Checkout when Protection Mode is set to CHALLENGE
+{% endcomment %}
+
+{% assign current_backend_url = "https://graduates-compatibility-supported-graduate.trycloudflare.com" %}
+{% assign app_endpoint = block.settings.app_url %}
+{% if app_endpoint == blank or app_endpoint contains "individual-runs-whose-suite" or app_endpoint contains "cafe-eugene" or app_endpoint contains "polymer-plots" or app_endpoint contains "america-england" or app_endpoint != current_backend_url %}
+  {% assign app_endpoint = current_backend_url %}
+{% endif %}
+
+<script>
+  window.TRAFFIQ_CONFIG = window.TRAFFIQ_CONFIG || {};
+  window.TRAFFIQ_CONFIG.shopDomain = {{ shop.permanent_domain | json }};
+  window.TRAFFIQ_CONFIG.appUrl = {{ app_endpoint | json }};
+</script>
+
+{% schema %}
+{
+  "name": "Traffiq Bot Challenge",
+  "target": "body",
+  "javascript": "traffiq-challenge.js",
+  "stylesheet": "traffiq-challenge.css",
+  "settings": [
+    {
+      "type": "text",
+      "id": "app_url",
+      "label": "Traffiq App Endpoint",
+      "default": "https://graduates-compatibility-supported-graduate.trycloudflare.com",
+      "info": "The public URL of your Traffiq app backend"
+    }
+  ]
+}
+{% endschema %}

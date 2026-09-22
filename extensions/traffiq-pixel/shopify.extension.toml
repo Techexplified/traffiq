@@ -1,0 +1,16 @@
+name = "traffiq-pixel"
+type = "web_pixel_extension"
+runtime_context = "strict"
+uid = "bc679a02-b78a-4993-95c8-f14e051b13c314931821"
+
+[privacy]
+purposes = ["analytics"]
+sale_of_data = false
+
+[settings]
+type = "object"
+
+[settings.fields.appUrl]
+name = "App Ingestion Endpoint"
+description = "The Traffiq telemetry backend endpoint"
+type = "single_line_text_field"
