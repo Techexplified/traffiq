@@ -4,7 +4,8 @@
 
   var KEY = "tq_challenge_verified";
   var BLOCKED_KEY = "tq_session_blocked";
-  var TUNNEL = "https://talk-raise-trivia-guided.trycloudflare.com";
+  var PROD_URL = "https://traffiq-smoky.vercel.app";
+  var TUNNEL = PROD_URL;
 
   try {
     if (window.location.search.indexOf("test_challenge") !== -1 || window.location.search.indexOf("simulate_high_severity") !== -1) {
@@ -27,17 +28,19 @@
   var shop = cfg.shopDomain || window.location.hostname;
   var appUrl = (cfg.appUrl || "").replace(/\/+$/, "");
 
-  // Detect and override any stale tunnel endpoints
+  // Detect and override any stale tunnel endpoints with Vercel production URL
   if (
     !appUrl ||
     appUrl.indexOf("trycloudflare.com") !== -1 ||
+    appUrl.indexOf("example.com") !== -1 ||
     appUrl.indexOf("graduates-compatibility") !== -1 ||
+    appUrl.indexOf("talk-raise-trivia") !== -1 ||
     appUrl.indexOf("individual-runs") !== -1 ||
     appUrl.indexOf("cafe-eugene") !== -1 ||
     appUrl.indexOf("polymer-plots") !== -1 ||
     appUrl.indexOf("america-england") !== -1
   ) {
-    appUrl = TUNNEL;
+    appUrl = PROD_URL;
   }
 
   var isArmed = isBlockedStored;

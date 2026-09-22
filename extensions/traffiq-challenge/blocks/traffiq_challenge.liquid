@@ -3,7 +3,7 @@
   Intercepts Add to Cart and Checkout when Protection Mode is set to CHALLENGE
 {% endcomment %}
 
-{% assign current_backend_url = "https://talk-raise-trivia-guided.trycloudflare.com" %}
+{% assign current_backend_url = "https://traffiq-smoky.vercel.app" %}
 {% assign app_endpoint = block.settings.app_url %}
 {% if app_endpoint == blank or app_endpoint contains "trycloudflare.com" %}
   {% assign app_endpoint = current_backend_url %}
@@ -26,7 +26,7 @@
       "type": "text",
       "id": "app_url",
       "label": "Traffiq App Endpoint",
-      "default": "https://talk-raise-trivia-guided.trycloudflare.com",
+      "default": "https://traffiq-smoky.vercel.app",
       "info": "The public URL of your Traffiq app backend"
     }
   ]

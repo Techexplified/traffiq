@@ -2,7 +2,7 @@
 
 client_id = "add5a28769a30d6564929931f077bf84"
 name = "traffiq"
-application_url = "https://example.com"
+application_url = "https://traffiq-smoky.vercel.app"
 embedded = true
 
 [access_scopes]
@@ -10,10 +10,23 @@ embedded = true
 scopes = "write_metaobject_definitions,write_metaobjects,write_pixels,write_products,read_customer_events"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://traffiq-smoky.vercel.app/api/auth",
+  "https://traffiq-smoky.vercel.app/api/auth/callback",
+  "https://traffiq-smoky.vercel.app/auth/callback",
+  "https://traffiq-smoky.vercel.app/auth/shopify/callback"
+]
 
 [webhooks]
 api_version = "2026-10"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
 
 [build]
 automatically_update_urls_on_dev = true

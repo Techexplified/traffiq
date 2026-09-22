@@ -1,7 +1,7 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
 client_id = "756e05704f05bf7d737d3e0e517ece64"
-application_url = "https://example.com"
+application_url = "https://traffiq-smoky.vercel.app"
 embedded = true
 name = "traffiq"
 
@@ -44,7 +44,12 @@ api_version = "2026-10"
   topics = [ "app/scopes_update" ]
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [
+  "https://traffiq-smoky.vercel.app/api/auth",
+  "https://traffiq-smoky.vercel.app/api/auth/callback",
+  "https://traffiq-smoky.vercel.app/auth/callback",
+  "https://traffiq-smoky.vercel.app/auth/shopify/callback"
+]
 
 [build]
 automatically_update_urls_on_dev = true
