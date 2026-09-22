@@ -4,8 +4,12 @@
 import { register } from "@shopify/web-pixels-extension";
 
 register(({ analytics, browser, init, settings, customerPrivacy }) => {
-  const baseAppUrl = ((settings && (settings.appUrl as string)) || "").replace(/\/+$/, "");
-  const endpoint = baseAppUrl ? `${baseAppUrl}/api/events` : "/api/events";
+  const fallbackAppUrl = "https://traffiq-smoky.vercel.app";
+  let baseAppUrl = ((settings && (settings.appUrl as string)) || "").replace(/\/+$/, "");
+  if (!baseAppUrl || baseAppUrl.includes("trycloudflare.com") || baseAppUrl.includes("example.com")) {
+    baseAppUrl = fallbackAppUrl;
+  }
+  const endpoint = `${baseAppUrl}/api/events`;
 
   const shopDomain =
     init?.data?.shop?.myshopifyDomain ||

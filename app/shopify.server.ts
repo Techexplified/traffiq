@@ -32,7 +32,7 @@ const shopify = shopifyApp({
 
         // Auto-connect / synchronize Web Pixel extension
         try {
-          const appUrl = process.env.SHOPIFY_APP_URL || "";
+          const appUrl = (process.env.SHOPIFY_APP_URL || "https://traffiq-smoky.vercel.app").replace(/\/+$/, "");
           if (appUrl) {
             const queryRes = await admin.graphql(
               `#graphql

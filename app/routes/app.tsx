@@ -15,7 +15,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     // Ensure Web Pixel is connected on the store and synchronized with active appUrl
     try {
-      const appUrl = process.env.SHOPIFY_APP_URL || "";
+      const appUrl = (process.env.SHOPIFY_APP_URL || "https://traffiq-smoky.vercel.app").replace(/\/+$/, "");
       if (appUrl) {
         const queryRes = await admin.graphql(
           `#graphql
