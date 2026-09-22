@@ -27,9 +27,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const isOnboarded = Boolean(dbShop?.isOnboarded);
   const initialStep = dbShop?.onboardingStep || 1;
 
+  const cleanShop = session.shop.replace(".myshopify.com", "");
+  const apiKey = process.env.SHOPIFY_API_KEY || "756e05704f05bf7d737d3e0e517ece64";
+  const themeEditorUrl = `https://admin.shopify.com/store/${cleanShop}/themes/current/editor?context=apps&activateAppId=${apiKey}/traffiq_challenge`;
+
   return {
     shop: shopData,
     shopDomain: session.shop,
+    themeEditorUrl,
     isAlreadyConnected,
     isOnboarded,
     initialStep,
@@ -90,7 +95,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function Onboarding() {
-  const { shop, shopDomain, isAlreadyConnected, initialStep, settings } = useLoaderData<typeof loader>();
+  const { shop, shopDomain, themeEditorUrl, isAlreadyConnected, initialStep, settings } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<{
     success: boolean;
     actionType?: string;
@@ -113,6 +118,8 @@ export default function Onboarding() {
   const [telemetryAccess, setTelemetryAccess] = useState(settings.telemetryAccess);
   const [threatDefense, setThreatDefense] = useState(settings.threatDefense);
   const [attributionAccess, setAttributionAccess] = useState(settings.attributionAccess);
+  const [hasOpenedThemeEditor, setHasOpenedThemeEditor] = useState(false);
+  const [embedConfirmed, setEmbedConfirmed] = useState(false);
   const navigate = useNavigate();
 
   const steps = [
@@ -636,7 +643,7 @@ export default function Onboarding() {
                     </span>
                   </div>
                   <div style={{ fontSize: "0.75rem", color: "var(--tq-text-muted)", marginTop: "0.15rem", lineHeight: 1.35 }}>
-                    Challenges rapid bot clicks and prevents automated Add-to-Cart hoarding.
+                    Challenges rapid bot clicks &amp; prevents cart hoarding (1-click Theme Editor activation in Step 4).
                   </div>
                 </div>
               </div>
@@ -804,9 +811,9 @@ export default function Onboarding() {
         </div>
       )}
 
-      {/* STEP 4: Results Ready (Very Simple Baseline Status) */}
+      {/* STEP 4: Results Ready & App Embed Theme Extension Activation */}
       {currentStep === 4 && (
-        <div className="tq-onboarding-hero" style={{ maxWidth: "460px" }}>
+        <div className="tq-onboarding-hero" style={{ maxWidth: "530px" }}>
           <div style={{
             width: "48px",
             height: "48px",
@@ -827,8 +834,8 @@ export default function Onboarding() {
           <h2 style={{ fontSize: "1.35rem", fontWeight: 700, margin: "0 0 0.25rem 0", color: "var(--tq-text-main)" }}>
             Results Ready for {shop.name}!
           </h2>
-          <p style={{ fontSize: "0.85rem", color: "var(--tq-text-muted)", marginBottom: "1.25rem", lineHeight: 1.45 }}>
-            Baseline scan completed for <strong>{inputStore}</strong>. Your store is ready for real-time bot protection.
+          <p style={{ fontSize: "0.85rem", color: "var(--tq-text-muted)", marginBottom: "1.1rem", lineHeight: 1.45 }}>
+            Baseline scan completed for <strong>{inputStore}</strong>. Enable storefront defense to complete activation.
           </p>
 
           {/* Simple, Clean Baseline Status Card */}
@@ -836,8 +843,8 @@ export default function Onboarding() {
             background: "#ffffff",
             border: "1px solid #e2e8f0",
             borderRadius: "12px",
-            padding: "1.15rem 1.35rem",
-            marginBottom: "1.35rem",
+            padding: "1rem 1.25rem",
+            marginBottom: "1rem",
             textAlign: "left",
             boxShadow: "0 1px 3px rgba(0, 0, 0, 0.04)",
           }}>
@@ -845,11 +852,11 @@ export default function Onboarding() {
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
-              paddingBottom: "0.75rem",
+              paddingBottom: "0.65rem",
               borderBottom: "1px solid #f1f5f9",
-              marginBottom: "0.85rem",
+              marginBottom: "0.75rem",
             }}>
-              <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a" }}>
+              <span style={{ fontSize: "0.825rem", fontWeight: 700, color: "#0f172a" }}>
                 Store Baseline
               </span>
               <span style={{
@@ -869,22 +876,15 @@ export default function Onboarding() {
               </span>
             </div>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: "0.65rem" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.825rem" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: "0.55rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem" }}>
                 <span style={{ color: "#64748b" }}>Storefront Telemetry</span>
                 <span style={{ fontWeight: 600, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.35rem" }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
                   Active (0 ms lag)
                 </span>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.825rem" }}>
-                <span style={{ color: "#64748b" }}>Bot Challenge Shield</span>
-                <span style={{ fontWeight: 600, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.35rem" }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
-                  Armed &amp; Ready
-                </span>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.825rem" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "0.8rem" }}>
                 <span style={{ color: "#64748b" }}>Checkout Protection</span>
                 <span style={{ fontWeight: 600, color: "#0f172a", display: "flex", alignItems: "center", gap: "0.35rem" }}>
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#16a34a" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12" /></svg>
@@ -894,11 +894,153 @@ export default function Onboarding() {
             </div>
           </div>
 
+          {/* Dedicated Storefront App Embed Activation Card */}
+          <div style={{
+            background: "#f8fafc",
+            border: "1.5px solid #cbd5e1",
+            borderRadius: "12px",
+            padding: "1.1rem 1.25rem",
+            marginBottom: "1.25rem",
+            textAlign: "left",
+            boxShadow: "0 2px 6px rgba(0, 0, 0, 0.03)",
+          }}>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "0.6rem",
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <div style={{
+                  width: "28px",
+                  height: "28px",
+                  borderRadius: "6px",
+                  background: "#eff6ff",
+                  color: "#2563eb",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  </svg>
+                </div>
+                <span style={{ fontSize: "0.875rem", fontWeight: 700, color: "#0f172a" }}>
+                  Enable Storefront Bot Challenge
+                </span>
+              </div>
+              <span className="tq-perm-scope-badge amber" style={{ fontSize: "0.7rem", padding: "0.15rem 0.5rem" }}>
+                Theme App Embed
+              </span>
+            </div>
+
+            <p style={{ fontSize: "0.78rem", color: "var(--tq-text-muted)", margin: "0 0 0.85rem 0", lineHeight: 1.4 }}>
+              To intercept suspicious bot sessions and present the CAPTCHA challenge on storefront product pages, activate the <strong>Traffiq Bot Challenge</strong> embed in your Shopify Theme Editor.
+            </p>
+
+            {/* 3-Step Guided Instructions */}
+            <div style={{
+              background: "#ffffff",
+              border: "1px solid #e2e8f0",
+              borderRadius: "8px",
+              padding: "0.75rem 0.85rem",
+              marginBottom: "0.85rem",
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.45rem",
+              fontSize: "0.76rem",
+              color: "#334155",
+            }}>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                <span style={{ background: "#2563eb", color: "#ffffff", width: "18px", height: "18px", borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 700, flexShrink: 0, marginTop: "1px" }}>1</span>
+                <span>Click the button below to open your active theme in Shopify Theme Editor.</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                <span style={{ background: "#2563eb", color: "#ffffff", width: "18px", height: "18px", borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 700, flexShrink: 0, marginTop: "1px" }}>2</span>
+                <span>Verify that <strong>Traffiq Bot Challenge</strong> is toggled <strong>ON</strong> under App Embeds.</span>
+              </div>
+              <div style={{ display: "flex", alignItems: "flex-start", gap: "0.5rem" }}>
+                <span style={{ background: "#2563eb", color: "#ffffff", width: "18px", height: "18px", borderRadius: "50%", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: "0.7rem", fontWeight: 700, flexShrink: 0, marginTop: "1px" }}>3</span>
+                <span>Click <strong>Save</strong> in the top right corner of the Shopify Theme Editor.</span>
+              </div>
+            </div>
+
+            {/* 1-Click Deep Link Button */}
+            <a
+              href={themeEditorUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => setHasOpenedThemeEditor(true)}
+              className="tq-btn tq-btn-primary"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.5rem",
+                textDecoration: "none",
+                width: "100%",
+                padding: "0.65rem 1.15rem",
+                fontSize: "0.875rem",
+                fontWeight: 650,
+                borderRadius: "8px",
+                background: "linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)",
+                boxShadow: "0 3px 10px rgba(37, 99, 235, 0.22)",
+                boxSizing: "border-box",
+              }}
+            >
+              <span>Open Shopify Theme Editor</span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                <polyline points="15 3 21 3 21 9" />
+                <line x1="10" y1="14" x2="21" y2="3" />
+              </svg>
+            </a>
+
+            {/* Confirmation Banner once clicked */}
+            {hasOpenedThemeEditor && (
+              <div style={{
+                fontSize: "0.76rem",
+                color: "#166534",
+                background: "#f0fdf4",
+                border: "1px solid #bbf7d0",
+                borderRadius: "6px",
+                padding: "0.45rem 0.7rem",
+                marginTop: "0.65rem",
+                display: "flex",
+                alignItems: "center",
+                gap: "0.45rem",
+              }}>
+                <span style={{ fontWeight: 700 }}>✓</span>
+                <span>Theme Editor opened in a new tab. Once saved in Shopify, proceed below.</span>
+              </div>
+            )}
+
+            {/* Checkbox confirmation */}
+            <label style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              fontSize: "0.78rem",
+              color: "#475569",
+              cursor: "pointer",
+              marginTop: "0.65rem",
+              userSelect: "none",
+            }}>
+              <input
+                type="checkbox"
+                checked={embedConfirmed}
+                onChange={(e) => setEmbedConfirmed(e.target.checked)}
+                style={{ width: "16px", height: "16px", accentColor: "#2563eb", cursor: "pointer", flexShrink: 0 }}
+              />
+              <span>I have enabled &amp; saved the Traffiq Bot Challenge embed in Shopify</span>
+            </label>
+          </div>
+
           <button
             type="button"
             onClick={() => setCurrentStep(5)}
             className="tq-btn tq-btn-primary"
-            style={{ padding: "0.65rem 1.8rem", fontSize: "0.9rem", borderRadius: "8px" }}
+            style={{ padding: "0.65rem 1.8rem", fontSize: "0.9rem", borderRadius: "8px", width: "100%" }}
           >
             Activate Protection on {shop.name} →
           </button>
@@ -975,6 +1117,10 @@ export default function Onboarding() {
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.825rem", color: "#334155", fontWeight: 600 }}>
               <span style={{ color: "#10b981" }}>✓</span>
+              <span>Storefront CAPTCHA Challenge App Embed enabled</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.825rem", color: "#334155", fontWeight: 600 }}>
+              <span style={{ color: "#10b981" }}>✓</span>
               <span>AI Traffic Insights &amp; Anomaly Alerts ready</span>
             </div>
           </div>
@@ -992,6 +1138,18 @@ export default function Onboarding() {
           >
             Open Traffic Truth Dashboard →
           </button>
+
+          <div style={{ marginTop: "0.85rem", fontSize: "0.775rem", color: "#64748b" }}>
+            Need to adjust your theme later?{" "}
+            <a
+              href={themeEditorUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: "#2563eb", textDecoration: "underline", fontWeight: 600 }}
+            >
+              Open Shopify Theme Editor ↗
+            </a>
+          </div>
         </div>
       )}
     </div>

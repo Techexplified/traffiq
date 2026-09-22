@@ -29,6 +29,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     prisma.shop.findUnique({ where: { id: shopId }, select: { email: true } }),
   ]);
 
+  const cleanShop = shopDomain.replace(".myshopify.com", "");
+  const apiKey = process.env.SHOPIFY_API_KEY || "756e05704f05bf7d737d3e0e517ece64";
+  const themeEditorUrl = `https://admin.shopify.com/store/${cleanShop}/themes/current/editor?context=apps&activateAppId=${apiKey}/traffiq_challenge`;
+
   return {
     settings: {
       protectionMode: settings?.protectionMode === "BLOCK" ? "BLOCK" : "CHALLENGE",
@@ -46,6 +50,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       shareData: settings?.anonymousDataSharing ?? false,
     },
     shopDomain,
+    themeEditorUrl,
     shopEmail: shopObj?.email || "sparsh.saxena@explified.com",
   };
 };
@@ -175,7 +180,7 @@ const getProtectionModeDesc = (mode: string) => {
 };
 
 export default function SettingsPage() {
-  const { settings: initialSettings } = useLoaderData<typeof loader>();
+  const { settings: initialSettings, themeEditorUrl } = useLoaderData<typeof loader>();
   const fetcher = useFetcher();
 
   const [protectionMode, setProtectionMode] = useState(initialSettings.protectionMode === "BLOCK" ? "BLOCK" : "CHALLENGE");
@@ -296,6 +301,50 @@ export default function SettingsPage() {
             <p style={{ fontSize: "0.775rem", color: "var(--tq-text-muted)", margin: "0.4rem 0 0 0" }}>
               {getProtectionModeDesc(protectionMode)}
             </p>
+          </div>
+
+          {/* Storefront Bot Challenge App Embed Activation */}
+          <div className="tq-settings-row-v2 stacked" style={{ borderTop: "1px solid #f1f5f9", paddingTop: "0.95rem", marginTop: "0.95rem", borderBottom: "none", paddingBottom: 0 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", width: "100%", gap: "1rem" }}>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
+                  <h4 style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--tq-text-main)", margin: 0 }}>
+                    Storefront Bot Challenge (App Embed)
+                  </h4>
+                  <span className="tq-perm-scope-badge amber" style={{ fontSize: "0.7rem", padding: "0.15rem 0.45rem" }}>
+                    Theme Embed
+                  </span>
+                </div>
+                <p style={{ fontSize: "0.775rem", color: "var(--tq-text-muted)", margin: 0, lineHeight: 1.4 }}>
+                  Displays an interactive bot verification modal on storefront product and cart pages when Protection Mode is set to Challenge. Enable or customize this embed in your active theme.
+                </p>
+              </div>
+
+              <a
+                href={themeEditorUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="tq-btn tq-btn-secondary"
+                style={{
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "0.4rem",
+                  fontSize: "0.8rem",
+                  padding: "0.45rem 0.85rem",
+                  textDecoration: "none",
+                  flexShrink: 0,
+                  borderRadius: "6px",
+                  fontWeight: 600,
+                }}
+              >
+                <span>Open Theme Editor</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                  <polyline points="15 3 21 3 21 9" />
+                  <line x1="10" y1="14" x2="21" y2="3" />
+                </svg>
+              </a>
+            </div>
           </div>
         </div>
       </div>
