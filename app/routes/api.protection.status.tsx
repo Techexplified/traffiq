@@ -15,8 +15,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   try {
     const url = new URL(request.url);
     const shopQuery = url.searchParams.get("shop");
-    const rawSessionKey = url.searchParams.get("sessionKey") || url.searchParams.get("clientId");
-    const sessionKey = rawSessionKey ? rawSessionKey.replace(/^["']+|["']+$/g, "").trim() : null;
+    const rawClientId = url.searchParams.get("clientId");
+    const rawSessionKey = url.searchParams.get("sessionKey");
+    const rawSessionId = url.searchParams.get("sessionId");
+
+    const candidateKeys = [rawClientId, rawSessionKey, rawSessionId]
+      .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+      .map((k) => k.replace(/^["']+|["']+$/g, "").trim());
+
+    const sessionKey = candidateKeys[0] || null;
 
     // Resolve shop domain
     let candidateDomain = shopQuery;
@@ -77,14 +84,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
     // Check if current session is already verified
     let isVerified = false;
-    if (sessionKey) {
+    if (candidateKeys.length > 0) {
       const verifiedAction = await prisma.protectionAction.findFirst({
         where: {
           shopId: shop.id,
           action: "CHALLENGE",
           status: "VERIFIED",
           session: {
-            sessionKey,
+            sessionKey: { in: candidateKeys },
           },
         },
       });
@@ -96,30 +103,37 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     // Check if current session is manually blocked by merchant in Traffic Investigation
     let isManuallyBlocked = false;
     let manualBlockReason = "";
-    if (sessionKey) {
+    if (candidateKeys.length > 0) {
       const manualBlockAction = await prisma.protectionAction.findFirst({
         where: {
-          shopId: shop.id,
           action: "BLOCK",
           status: "EXECUTED",
-          OR: [
-            { session: { sessionKey } },
-            { session: { id: sessionKey } },
-            { sessionId: sessionKey },
-            { metadata: { contains: sessionKey } },
-          ],
+          OR: candidateKeys.flatMap((k) => [
+            { session: { sessionKey: k } },
+            { session: { id: k } },
+            { sessionId: k },
+            { metadata: { contains: k } },
+          ]),
         },
         orderBy: { createdAt: "desc" },
       });
 
       const flaggedSession = await prisma.trafficSession.findFirst({
         where: {
-          shopId: shop.id,
           isFlagged: true,
-          flaggedReason: { contains: "Manually blocked" },
-          OR: [
-            { sessionKey },
-            { id: sessionKey },
+          OR: candidateKeys.flatMap((k) => [
+            { sessionKey: k },
+            { id: k },
+          ]),
+          AND: [
+            {
+              OR: [
+                { flaggedReason: { contains: "blocked", mode: "insensitive" } },
+                { flaggedReason: { contains: "manual", mode: "insensitive" } },
+                { riskScore: { gte: 90 } },
+                { severity: "CRITICAL" },
+              ],
+            },
           ],
         },
         orderBy: { lastSeenAt: "desc" },

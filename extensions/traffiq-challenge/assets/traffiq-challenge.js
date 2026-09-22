@@ -3,23 +3,25 @@
   window.__TRAFFIQ_CHALLENGE_INITIALIZED__ = true;
 
   var KEY = "tq_challenge_verified";
+  var BLOCKED_KEY = "tq_session_blocked";
   var TUNNEL = "https://talk-raise-trivia-guided.trycloudflare.com";
 
   try {
     if (window.location.search.indexOf("test_challenge") !== -1 || window.location.search.indexOf("simulate_high_severity") !== -1) {
       sessionStorage.removeItem(KEY);
+      sessionStorage.removeItem(BLOCKED_KEY);
+      localStorage.removeItem(BLOCKED_KEY);
       console.log("[Traffiq Challenge] Test mode: session verification reset.");
     }
   } catch (e) {}
 
-  window.TraffiqChallenge = {
-    reset: function () {
-      try { sessionStorage.removeItem(KEY); } catch (e) {}
-      console.log("[Traffiq Challenge] Verification cleared.");
-    },
-    trigger: function () { showModal(); },
-    check: function () { return initProtection(appUrl); }
-  };
+  // Check persistent block flags immediately upon execution
+  var isBlockedStored = false;
+  try {
+    isBlockedStored =
+      sessionStorage.getItem(BLOCKED_KEY) === "true" ||
+      localStorage.getItem(BLOCKED_KEY) === "true";
+  } catch (e) {}
 
   var cfg = window.TRAFFIQ_CONFIG || {};
   var shop = cfg.shopDomain || window.location.hostname;
@@ -28,8 +30,9 @@
   // Detect and override any stale tunnel endpoints
   if (
     !appUrl ||
+    appUrl.indexOf("trycloudflare.com") !== -1 ||
     appUrl.indexOf("graduates-compatibility") !== -1 ||
-    appUrl.indexOf("individual-runs-whose-suite") !== -1 ||
+    appUrl.indexOf("individual-runs") !== -1 ||
     appUrl.indexOf("cafe-eugene") !== -1 ||
     appUrl.indexOf("polymer-plots") !== -1 ||
     appUrl.indexOf("america-england") !== -1
@@ -37,10 +40,39 @@
     appUrl = TUNNEL;
   }
 
-  var isArmed = false;
+  var isArmed = isBlockedStored;
   var pending = null;
-  var activeProtectionMode = "CHECKING"; // "CHECKING" | "ALLOW" | "CHALLENGE" | "BLOCK"
+  var activeProtectionMode = isBlockedStored ? "BLOCK" : "CHECKING";
   var currentStatusPromise = null;
+  var lastSafeCheckTime = 0;
+
+  window.TraffiqChallenge = {
+    reset: function () {
+      try {
+        sessionStorage.removeItem(KEY);
+        sessionStorage.removeItem(BLOCKED_KEY);
+        localStorage.removeItem(BLOCKED_KEY);
+      } catch (e) {}
+      activeProtectionMode = "ALLOW";
+      isArmed = false;
+      console.log("[Traffiq Challenge] Verification cleared.");
+    },
+    trigger: function () { showModal(); },
+    check: function () { return initProtection(appUrl); },
+    isBlocked: function () { return isCurrentlyBlocked(); }
+  };
+
+  function isCurrentlyBlocked() {
+    if (activeProtectionMode === "BLOCK") return true;
+    try {
+      if (sessionStorage.getItem(BLOCKED_KEY) === "true" || localStorage.getItem(BLOCKED_KEY) === "true") {
+        activeProtectionMode = "BLOCK";
+        isArmed = true;
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  }
 
   function getCid() {
     try {
@@ -61,8 +93,25 @@
         }
       }
       if (window.localStorage) {
-        var localY = window.localStorage.getItem("_shopify_y");
+        var localY = window.localStorage.getItem("_shopify_y") || window.localStorage.getItem("traffiq_client_id");
         if (localY) return String(localY).replace(/^["']+|["']+$/g, "").trim();
+      }
+      if (window.sessionStorage) {
+        var sessY = window.sessionStorage.getItem("_shopify_y") || window.sessionStorage.getItem("traffiq_client_id");
+        if (sessY) return String(sessY).replace(/^["']+|["']+$/g, "").trim();
+      }
+    } catch (e) {}
+    return "";
+  }
+
+  function getSid() {
+    try {
+      var c = document.cookie.split(";");
+      for (var j = 0; j < c.length; j++) {
+        var s2 = c[j].trim();
+        if (s2.indexOf("_shopify_s=") === 0) {
+          return decodeURIComponent(s2.substring(11)).replace(/^["']+|["']+$/g, "").trim();
+        }
       }
     } catch (e) {}
     return "";
@@ -70,24 +119,37 @@
 
   function initProtection(endpoint) {
     var cid = getCid();
+    var sid = getSid();
     var isTest = window.location.search.indexOf("test_challenge") !== -1 || window.location.search.indexOf("simulate_high_severity") !== -1;
     var q = endpoint + "/api/protection/status?shop=" + encodeURIComponent(shop) +
       (cid ? "&clientId=" + encodeURIComponent(cid) : "") +
+      (sid ? "&sessionKey=" + encodeURIComponent(sid) : "") +
       (isTest ? "&test_challenge=1" : "");
 
-    currentStatusPromise = fetch(q, { mode: "cors" })
+    currentStatusPromise = fetch(q, {
+      mode: "cors",
+      headers: { "Cache-Control": "no-cache" }
+    })
       .then(function (r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
         return r.json();
       })
       .then(function (d) {
-        if (d && d.blockRequired) {
+        if (d && (d.blockRequired || d.isManuallyBlocked)) {
           appUrl = endpoint;
           activeProtectionMode = "BLOCK";
           isArmed = true;
-          try { sessionStorage.removeItem(KEY); } catch (e) {}
+          try {
+            sessionStorage.setItem(BLOCKED_KEY, "true");
+            localStorage.setItem(BLOCKED_KEY, "true");
+            sessionStorage.removeItem(KEY);
+          } catch (e) {}
           console.log("[Traffiq Protection] 🛑 Hard Block Active (" + (d.reason || d.severity) + "). Checkout & cart access restricted.");
         } else if (d && d.challengeRequired) {
+          try {
+            sessionStorage.removeItem(BLOCKED_KEY);
+            localStorage.removeItem(BLOCKED_KEY);
+          } catch (e) {}
           var verified = false;
           try { verified = sessionStorage.getItem(KEY) === "true"; } catch (e) {}
           appUrl = endpoint;
@@ -99,8 +161,13 @@
             console.log("[Traffiq Protection] ⚠️ Challenge Required (" + (d.reason || d.severity) + "). Challenge armed.");
           }
         } else {
+          try {
+            sessionStorage.removeItem(BLOCKED_KEY);
+            localStorage.removeItem(BLOCKED_KEY);
+          } catch (e) {}
           activeProtectionMode = "ALLOW";
           isArmed = false;
+          lastSafeCheckTime = Date.now();
           console.log("[Traffiq Protection] ✓ Safe Shopper (Severity: " + (d ? d.severity : "LOW") + "). Traffic allowed.");
         }
         return d;
@@ -110,8 +177,10 @@
         if (endpoint !== TUNNEL) {
           return initProtection(TUNNEL);
         }
-        activeProtectionMode = "ALLOW";
-        isArmed = false;
+        if (!isBlockedStored) {
+          activeProtectionMode = "ALLOW";
+          isArmed = false;
+        }
         return null;
       });
 
@@ -131,12 +200,12 @@
     initProtection(appUrl);
   });
 
-  // Periodic status poll every 12 seconds if not currently blocked
+  // Periodic status poll every 8 seconds if not currently blocked
   setInterval(function () {
     if (activeProtectionMode !== "BLOCK") {
       initProtection(appUrl);
     }
-  }, 12000);
+  }, 8000);
 
   // ==========================================
   // CART & CHECKOUT ACTION INTERCEPTION
@@ -160,7 +229,15 @@
     '.shopify-payment-button',
     '.shopify-payment-button__button',
     '[data-testid*="checkout"]',
-    'product-form button[type="submit"]'
+    'product-form button[type="submit"]',
+    'product-form button',
+    'quick-add-modal button[type="submit"]',
+    '.quick-add__submit',
+    '#CartDrawer-Checkout',
+    '#checkout',
+    '[name="checkout"]',
+    'form[action*="/checkout"] button',
+    'form[action*="/cart"] button[type="submit"]'
   ].join(",");
 
   function isCartOrCheckoutElement(el) {
@@ -169,9 +246,13 @@
     if (btn) return btn;
 
     var form = el.closest('form[action*="/cart/add"],form[action*="/cart"],form[action*="/checkout"]');
-    if (form && (el.tagName === "BUTTON" || (el.tagName === "INPUT" && el.type === "submit") || el.closest("button"))) {
+    if (form && (el.tagName === "BUTTON" || (el.tagName === "INPUT" && (el.type === "submit" || el.type === "button")) || el.closest("button"))) {
       return el.closest("button") || el;
     }
+
+    var a = el.closest('a[href*="/checkout"],a[href*="/cart"]');
+    if (a) return a;
+
     return null;
   }
 
@@ -180,8 +261,8 @@
     var btn = isCartOrCheckoutElement(e.target);
     if (!btn) return;
 
-    if (activeProtectionMode === "BLOCK") {
-      console.log("[Traffiq Protection] Blocked Add to Cart / Checkout click.");
+    if (isCurrentlyBlocked()) {
+      console.log("[Traffiq Protection] 🛑 Blocked Add to Cart / Checkout click for restricted session.");
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
@@ -190,26 +271,34 @@
       return false;
     }
 
-    if (activeProtectionMode === "CHECKING" && currentStatusPromise) {
+    // Verify protection status before allowing action if last safe check was > 4 seconds ago
+    var now = Date.now();
+    if (now - lastSafeCheckTime > 4000) {
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      currentStatusPromise.then(function (d) {
-        if (d && d.blockRequired) {
+      pending = { type: "click", el: btn };
+
+      initProtection(appUrl).then(function (d) {
+        if (d && (d.blockRequired || d.isManuallyBlocked)) {
           pending = null;
           showModal();
         } else if (d && d.challengeRequired) {
           var verified = false;
           try { verified = sessionStorage.getItem(KEY) === "true"; } catch (err) {}
           if (!verified) {
-            pending = { type: "click", el: btn };
             showModal();
           } else {
-            if (btn.click) btn.click();
+            lastSafeCheckTime = Date.now();
+            resume();
           }
         } else {
-          if (btn.click) btn.click();
+          lastSafeCheckTime = Date.now();
+          resume();
         }
+      }).catch(function () {
+        lastSafeCheckTime = Date.now();
+        resume();
       });
       return false;
     }
@@ -236,13 +325,44 @@
     var isCartSubmit = act.indexOf("/cart/add") !== -1 || act.indexOf("/cart") !== -1 || act.indexOf("/checkout") !== -1;
     if (!isCartSubmit) return;
 
-    if (activeProtectionMode === "BLOCK") {
-      console.log("[Traffiq Protection] Blocked Add to Cart / Checkout form submission.");
+    if (isCurrentlyBlocked()) {
+      console.log("[Traffiq Protection] 🛑 Blocked form submit for restricted session.");
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
       pending = null;
       showModal();
+      return false;
+    }
+
+    var now = Date.now();
+    if (now - lastSafeCheckTime > 4000) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+      pending = { type: "submit", form: form };
+
+      initProtection(appUrl).then(function (d) {
+        if (d && (d.blockRequired || d.isManuallyBlocked)) {
+          pending = null;
+          showModal();
+        } else if (d && d.challengeRequired) {
+          var verified = false;
+          try { verified = sessionStorage.getItem(KEY) === "true"; } catch (err) {}
+          if (!verified) {
+            showModal();
+          } else {
+            lastSafeCheckTime = Date.now();
+            resume();
+          }
+        } else {
+          lastSafeCheckTime = Date.now();
+          resume();
+        }
+      }).catch(function () {
+        lastSafeCheckTime = Date.now();
+        resume();
+      });
       return false;
     }
 
@@ -274,8 +394,8 @@
     );
 
     if (isCartUrl) {
-      if (activeProtectionMode === "BLOCK") {
-        console.log("[Traffiq Protection] Blocked fetch request:", url);
+      if (isCurrentlyBlocked()) {
+        console.log("[Traffiq Protection] 🛑 Blocked fetch request for restricted session:", url);
         showModal();
         return Promise.reject(new Error("Traffiq: Action blocked by security policy"));
       }
@@ -305,8 +425,8 @@
   };
   XMLHttpRequest.prototype.send = function () {
     if (this._tq_url && (this._tq_url.indexOf("/cart/add") !== -1 || this._tq_url.indexOf("/checkout") !== -1)) {
-      if (activeProtectionMode === "BLOCK") {
-        console.log("[Traffiq Protection] Blocked XHR request:", this._tq_url);
+      if (isCurrentlyBlocked()) {
+        console.log("[Traffiq Protection] 🛑 Blocked XHR request for restricted session:", this._tq_url);
         showModal();
         return;
       }
@@ -340,6 +460,8 @@
     m.id = "traffiq-challenge-modal";
     m.dataset.mode = activeProtectionMode;
     m.className = "tq-modal-overlay";
+
+    var target = document.body || document.documentElement;
 
     if (activeProtectionMode === "BLOCK") {
       var incidentId = "TQ-" + Math.floor(100000 + Math.random() * 900000);
@@ -376,7 +498,7 @@
         '<span>Automated Activity Signature Detected</span>' +
         '</div>' +
         '<p class="tq-reason-text">' +
-        'High-velocity browsing or automated bot signals were detected on this session. Access to checkout and cart operations has been restricted to safeguard store inventory and prevent card testing.' +
+        'High-velocity browsing or automated signals were detected on this session. Access to checkout and cart operations has been restricted to safeguard store inventory and prevent card testing.' +
         '</p>' +
         '</div>' +
         '<div class="tq-audit-strip">' +
@@ -402,7 +524,7 @@
         '<span class="tq-verified-pill">Shopify Verified</span>' +
         '</div>' +
         '</div>';
-      document.body.appendChild(m);
+      target.appendChild(m);
       m.querySelector("#tq-c-btn").addEventListener("click", hideModal);
       var dismissBtn = m.querySelector("#tq-dismiss-btn");
       if (dismissBtn) dismissBtn.addEventListener("click", hideModal);
@@ -411,9 +533,13 @@
         reloadBtn.addEventListener("click", function () {
           reloadBtn.disabled = true;
           reloadBtn.innerHTML = '<span class="tq-spinner"></span> Checking...';
-          try { sessionStorage.removeItem(KEY); } catch (e) {}
+          try {
+            sessionStorage.removeItem(BLOCKED_KEY);
+            localStorage.removeItem(BLOCKED_KEY);
+            sessionStorage.removeItem(KEY);
+          } catch (e) {}
           initProtection(appUrl).then(function (d) {
-            if (d && !d.blockRequired) {
+            if (d && !d.blockRequired && !d.isManuallyBlocked) {
               hideModal();
               window.location.reload();
             } else {
@@ -449,7 +575,7 @@
       '<span class="tq-verified-pill">Protected Store</span>' +
       '</div>' +
       '</div>';
-    document.body.appendChild(m);
+    target.appendChild(m);
     m.querySelector("#tq-c-btn").addEventListener("click", hideModal);
     m.addEventListener("click", function (e) { if (e.target === m) hideModal(); });
     setupSlider(m);
@@ -535,13 +661,25 @@
 
   function showModal() {
     var m = getModal();
+    if (!m) return;
     if (m._reset) m._reset();
     m.classList.add("tq-active");
+    m.style.setProperty("display", "flex", "important");
+    m.style.setProperty("opacity", "1", "important");
+    m.style.setProperty("visibility", "visible", "important");
+    m.style.setProperty("pointer-events", "auto", "important");
+    m.style.setProperty("z-index", "2147483647", "important");
   }
 
   function hideModal() {
     var m = document.getElementById("traffiq-challenge-modal");
-    if (m) m.classList.remove("tq-active");
+    if (m) {
+      m.classList.remove("tq-active");
+      m.style.setProperty("display", "none", "important");
+      m.style.setProperty("opacity", "0", "important");
+      m.style.setProperty("visibility", "hidden", "important");
+      m.style.setProperty("pointer-events", "none", "important");
+    }
   }
 
   function resume() {

@@ -5,7 +5,7 @@
 
 {% assign current_backend_url = "https://talk-raise-trivia-guided.trycloudflare.com" %}
 {% assign app_endpoint = block.settings.app_url %}
-{% if app_endpoint == blank or app_endpoint contains "graduates-compatibility" or app_endpoint contains "individual-runs" or app_endpoint contains "cafe-eugene" or app_endpoint contains "polymer-plots" or app_endpoint contains "america-england" %}
+{% if app_endpoint == blank or app_endpoint contains "trycloudflare.com" %}
   {% assign app_endpoint = current_backend_url %}
 {% endif %}
 

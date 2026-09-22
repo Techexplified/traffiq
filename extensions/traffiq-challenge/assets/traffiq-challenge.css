@@ -22,9 +22,10 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 999999999;
+  z-index: 2147483647;
   opacity: 0;
   visibility: hidden;
+  pointer-events: none;
   transition: opacity 0.25s ease, visibility 0.25s ease;
   padding: 1.25rem;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Helvetica, Arial, sans-serif;
@@ -36,8 +37,11 @@
 }
 
 .tq-modal-overlay.tq-active {
-  opacity: 1;
-  visibility: visible;
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: flex !important;
+  pointer-events: auto !important;
+  z-index: 2147483647 !important;
 }
 
 .tq-modal-card {

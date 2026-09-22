@@ -156,6 +156,19 @@ export async function processIngestionEvent(
   const cost = payload.totalCost ? Number(payload.totalCost) : 0;
 
   if (!session) {
+    // Check if this visitor/sessionKey was previously manually blocked by merchant
+    const wasManuallyBlocked = await prisma.protectionAction.findFirst({
+      where: {
+        shopId,
+        action: "BLOCK",
+        status: "EXECUTED",
+        OR: [
+          { session: { sessionKey } },
+          { metadata: { contains: sessionKey } },
+        ],
+      },
+    });
+
     // Start new TrafficSession
     session = await prisma.trafficSession.create({
       data: {
@@ -184,9 +197,14 @@ export async function processIngestionEvent(
         checkoutStarted: payload.eventType === "checkout_started",
         purchaseCompleted: payload.eventType === "purchase",
         totalSpend: cost,
-        riskScore: 0,
-        trafficType: "HUMAN",
-        severity: "LOW",
+        riskScore: wasManuallyBlocked ? 99 : 0,
+        trafficType: wasManuallyBlocked ? "BOT" : "HUMAN",
+        severity: wasManuallyBlocked ? "CRITICAL" : "LOW",
+        isFlagged: Boolean(wasManuallyBlocked),
+        flaggedReason: wasManuallyBlocked ? "Manually blocked by merchant" : null,
+        aiRecommendation: wasManuallyBlocked
+          ? "Session manually blocked by merchant. Block active on storefront and checkout."
+          : null,
       },
     });
 

@@ -49,6 +49,58 @@ export class TrafficDetectionEngine {
     config: DetectionConfigType = DetectionConfig,
     persist: boolean = true
   ): Promise<DetectionResultOutput> {
+    // 0. Check if session or its sessionKey was manually blocked by merchant
+    const isManuallyBlocked =
+      (session.isFlagged &&
+        (session.flaggedReason?.toLowerCase().includes("blocked") ||
+          session.flaggedReason?.toLowerCase().includes("manual") ||
+          session.riskScore >= 90)) ||
+      Boolean(
+        await prisma.protectionAction.findFirst({
+          where: {
+            action: "BLOCK",
+            status: "EXECUTED",
+            OR: [
+              { sessionId: session.id },
+              { session: { sessionKey: session.sessionKey } },
+              { metadata: { contains: session.sessionKey } },
+            ],
+          },
+        })
+      );
+
+    if (isManuallyBlocked) {
+      if (persist) {
+        try {
+          await prisma.trafficSession.update({
+            where: { id: session.id },
+            data: {
+              riskScore: 99,
+              trafficType: "BOT",
+              severity: "CRITICAL",
+              isFlagged: true,
+              flaggedReason: "Manually blocked by merchant",
+              aiRecommendation: "Session manually blocked by merchant. Block active on storefront and checkout.",
+            },
+          });
+        } catch {}
+      }
+
+      return {
+        riskScore: 99,
+        trafficType: "BOT",
+        severity: "CRITICAL",
+        confidence: 99,
+        reasons: ["Session manually blocked by merchant via Traffic Investigation"],
+        signals: [],
+        recommendedAction: "BLOCK",
+        aiExplanation: "Session manually blocked by merchant. Access to checkout and storefront operations restricted.",
+        isFlagged: true,
+        flaggedReason: "Manually blocked by merchant",
+        aiRecommendation: "Session manually blocked by merchant. Block active on storefront and checkout.",
+      };
+    }
+
     // 1. Calculate session duration in seconds
     const durationSec = Math.max(
       1,

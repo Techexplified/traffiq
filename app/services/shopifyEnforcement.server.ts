@@ -77,8 +77,10 @@ export async function validateCheckoutSession(
 
   const isSessionFlaggedAsBlocked =
     session.isFlagged &&
-    (session.flaggedReason?.includes("Manually blocked") ||
-      session.aiRecommendation?.includes("manually blocked"));
+    (session.flaggedReason?.toLowerCase().includes("blocked") ||
+      session.flaggedReason?.toLowerCase().includes("manual") ||
+      session.aiRecommendation?.toLowerCase().includes("blocked") ||
+      session.riskScore >= 90);
 
   if (manualBlock || isSessionFlaggedAsBlocked) {
     return {

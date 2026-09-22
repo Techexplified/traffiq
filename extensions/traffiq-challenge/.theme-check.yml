@@ -1,0 +1,10 @@
+AssetSizeAppBlockJavaScript:
+  enabled: false
+AssetSizeAppBlockCSS:
+  enabled: false
+MatchingTranslations:
+  enabled: false
+ValidSchema:
+  enabled: false
+all:
+  severity: suggestion
