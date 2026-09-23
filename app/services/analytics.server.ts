@@ -1251,7 +1251,7 @@ export class AnalyticsService {
       availableTrafficTypes,
     };
 
-    investigationSessionsCache.set(cacheKey, { data: result, expiresAt: Date.now() + 30000 });
+    investigationSessionsCache.set(cacheKey, { data: result, expiresAt: Date.now() + 5000 });
 
     return result;
   }

@@ -385,16 +385,20 @@ export default function TrafficInvestigation() {
     : 56;
 
   // Track initial render to skip duplicate fetch
+  // Track initial render to skip duplicate fetch
   const isInitialMount = useRef(true);
+  const selectedSessionRef = useRef<ScoredSession | null>(selectedSession);
+  selectedSessionRef.current = selectedSession;
 
   // Fetch list of sessions from GET /api/traffic/sessions
-  const fetchSessions = useCallback(async () => {
-    setIsLoadingList(true);
+  const fetchSessions = useCallback(async (silent = false) => {
+    if (!silent) setIsLoadingList(true);
     try {
       const params = new URLSearchParams({
         page: String(activePage),
         limit: "8",
         shop: shopDomain,
+        _t: String(Date.now()),
       });
 
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
@@ -416,8 +420,9 @@ export default function TrafficInvestigation() {
           setTotalPages(data.totalPages || 1);
           setTotalCount(data.totalCount ?? data.sessions.length);
 
+          const currentSelected = selectedSessionRef.current;
           // If currently selected session is not in returned list, select the first
-          if (data.sessions.length > 0 && (!selectedSession || !data.sessions.some((s: ScoredSession) => s.id === selectedSession.id))) {
+          if (data.sessions.length > 0 && (!currentSelected || !data.sessions.some((s: ScoredSession) => s.id === currentSelected.id))) {
             loadSessionDetail(data.sessions[0].id, data.sessions[0]);
           }
         }
@@ -425,7 +430,7 @@ export default function TrafficInvestigation() {
     } catch (err) {
       console.error("Failed to fetch investigation sessions:", err);
     } finally {
-      setIsLoadingList(false);
+      if (!silent) setIsLoadingList(false);
     }
   }, [
     activePage,
@@ -440,7 +445,6 @@ export default function TrafficInvestigation() {
     sortBy,
     sortOrder,
     shopDomain,
-    selectedSession,
   ]);
 
   // Fetch single session details from GET /api/traffic/sessions/:id
@@ -478,6 +482,16 @@ export default function TrafficInvestigation() {
     return () => clearTimeout(debounceTimer);
   }, [fetchSessions]);
 
+  // Real-time background sync: automatically refresh sessions every 10s when active
+  useEffect(() => {
+    const timer = setInterval(() => {
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        fetchSessions(true);
+      }
+    }, 10000);
+    return () => clearInterval(timer);
+  }, [fetchSessions]);
+
   // Copy to clipboard helper
   const handleCopyId = (id: string, e?: React.MouseEvent) => {
     e?.stopPropagation();
@@ -503,10 +517,37 @@ export default function TrafficInvestigation() {
   return (
     <div className="tq-page">
       {/* Header */}
-      <div className="tq-header-row">
+      <div className="tq-header-row" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "1rem" }}>
         <div className="tq-header-title">
           <h1>Traffic Investigation</h1>
           <p>Explore suspicious traffic and understand why sessions were flagged.</p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+          <button
+            type="button"
+            onClick={() => fetchSessions(false)}
+            disabled={isLoadingList}
+            style={{
+              display: "inline-flex",
+              alignItems: "center",
+              gap: "0.5rem",
+              background: "#ffffff",
+              border: "1px solid #d1d5db",
+              color: "#1e293b",
+              fontWeight: 600,
+              fontSize: "0.85rem",
+              padding: "0.5rem 0.85rem",
+              borderRadius: "6px",
+              cursor: isLoadingList ? "not-allowed" : "pointer",
+              boxShadow: "0 1px 2px rgba(0,0,0,0.05)",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <span style={{ display: "inline-block", transform: isLoadingList ? "rotate(360deg)" : "none", transition: "transform 0.6s linear" }}>
+              🔄
+            </span>
+            {isLoadingList ? "Refreshing..." : "Refresh Live Traffic"}
+          </button>
         </div>
       </div>
 

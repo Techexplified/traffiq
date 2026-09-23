@@ -265,6 +265,13 @@ export async function processIngestionEvent(
     }
   }
 
+  // 6. Invalidate analytics & investigation session caches so live visits appear immediately
+  try {
+    AnalyticsService.invalidateSessionCache(shopId, session.id);
+  } catch (err) {
+    console.error("[SessionAggregator] Cache invalidation error:", err);
+  }
+
   return { event, session };
 }
 
