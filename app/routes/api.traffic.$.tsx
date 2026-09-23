@@ -93,16 +93,18 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
       const compareRange = url.searchParams.get("compareRange") || undefined;
       const startDate = url.searchParams.get("startDate") || undefined;
       const endDate = url.searchParams.get("endDate") || undefined;
-      const overview = await getDashboardOverview(shopId, { dateRange, compareRange, startDate, endDate });
+      const timeZone = url.searchParams.get("tz") || url.searchParams.get("timezone") || undefined;
+      const overview = await getDashboardOverview(shopId, { dateRange, compareRange, startDate, endDate, timeZone });
       return Response.json({ success: true, shopDomain, overview, metrics: overview }, { headers: corsHeaders });
     }
 
     // 2. GET /api/traffic/sessions or GET /api/traffic/sessions/:id
     case "sessions": {
+      const timeZone = url.searchParams.get("tz") || url.searchParams.get("timezone") || undefined;
       const sessionId = parts[1];
       if (sessionId) {
         // GET /api/traffic/sessions/:id
-        const sessionDetail = await getSessionDetail(shopId, sessionId);
+        const sessionDetail = await getSessionDetail(shopId, sessionId, timeZone);
         if (!sessionDetail) {
           return Response.json(
             { error: `Session '${sessionId}' not found for this store` },
@@ -149,6 +151,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
         dateRange,
         sortBy,
         sortOrder,
+        timeZone,
       });
 
       return Response.json({ success: true, shopDomain, ...sessionsData }, { headers: corsHeaders });

@@ -39,9 +39,12 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  const url = new URL(request.url);
+  const timeZone = url.searchParams.get("tz") || url.searchParams.get("timezone") || undefined;
+
   const [metrics, sessionsData, shopSettings] = await Promise.all([
-    getDashboardOverview(shopId),
-    getInvestigationSessions(shopId, { limit: 8, page: 1 }),
+    getDashboardOverview(shopId, { timeZone }),
+    getInvestigationSessions(shopId, { limit: 8, page: 1, timeZone }),
     getShopSettings(shopId),
   ]);
 
@@ -252,6 +255,33 @@ function formatCountry(country?: string, flag?: string) {
   return { flag: displayFlag, name: country };
 }
 
+/**
+ * Format session time in user's local browser timezone
+ */
+function formatSessionTime(timestampOrStr?: string, fallbackStr?: string): string {
+  if (!timestampOrStr) return fallbackStr || "";
+  try {
+    const d = new Date(timestampOrStr);
+    if (isNaN(d.getTime())) return fallbackStr || timestampOrStr;
+    const datePart = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const timePart = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true });
+    return `${datePart}, ${timePart}`;
+  } catch {
+    return fallbackStr || timestampOrStr;
+  }
+}
+
+function formatTimelineTime(timestampOrStr?: string, fallbackStr?: string): string {
+  if (!timestampOrStr) return fallbackStr || "";
+  try {
+    const d = new Date(timestampOrStr);
+    if (isNaN(d.getTime())) return fallbackStr || timestampOrStr;
+    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
+  } catch {
+    return fallbackStr || timestampOrStr;
+  }
+}
+
 function cleanUrlPath(url?: string): string {
   if (!url) return "/";
   try {
@@ -318,6 +348,11 @@ export default function TrafficInvestigation() {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [showSignalsDropdown, setShowSignalsDropdown] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
   const [showActivityDropdown, setShowActivityDropdown] = useState(false);
   const [showAssessmentDropdown, setShowAssessmentDropdown] = useState(false);
   const [actionNotice, setActionNotice] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -410,6 +445,7 @@ export default function TrafficInvestigation() {
   const fetchSessions = useCallback(async (silent = false) => {
     if (!silent) setIsLoadingList(true);
     try {
+      const browserTz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined;
       const params = new URLSearchParams({
         page: String(activePage),
         limit: "8",
@@ -417,6 +453,7 @@ export default function TrafficInvestigation() {
         _t: String(Date.now()),
       });
 
+      if (browserTz) params.set("tz", browserTz);
       if (searchQuery.trim()) params.set("search", searchQuery.trim());
       if (riskFilter !== "All") params.set("riskFilter", riskFilter);
       if (trafficTypeFilter !== "All") params.set("trafficType", trafficTypeFilter);
@@ -472,7 +509,8 @@ export default function TrafficInvestigation() {
     setIsLoadingDetail(true);
 
     try {
-      const res = await fetch(`/api/traffic/sessions/${encodeURIComponent(sessionId)}?shop=${encodeURIComponent(shopDomain)}`);
+      const browserTz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
+      const res = await fetch(`/api/traffic/sessions/${encodeURIComponent(sessionId)}?shop=${encodeURIComponent(shopDomain)}${browserTz ? `&tz=${encodeURIComponent(browserTz)}` : ""}`);
       if (res.ok) {
         const data = await res.json();
         if (data.session) {
@@ -877,8 +915,8 @@ export default function TrafficInvestigation() {
                         <td style={{ color: "var(--tq-text-muted)", fontSize: "0.825rem", whiteSpace: "nowrap" }}>
                           {countryInfo.flag} {countryInfo.name}
                         </td>
-                        <td style={{ color: "var(--tq-text-muted)", fontSize: "0.8rem", whiteSpace: "nowrap" }}>
-                          {session.time}
+                        <td style={{ color: "var(--tq-text-muted)", fontSize: "0.8rem", whiteSpace: "nowrap" }} suppressHydrationWarning>
+                          {isMounted ? formatSessionTime(session.timestamp || session.lastSeenAt, session.time) : session.time}
                         </td>
                         <td>
                           <span className={`tq-badge ${isManuallyBlocked ? "tq-badge-high" : isFlagged ? "tq-badge-medium" : "tq-badge-good"}`} style={{ fontWeight: 600, fontSize: "0.75rem" }}>
@@ -1050,8 +1088,8 @@ export default function TrafficInvestigation() {
                   <div style={{ fontSize: "0.725rem", color: "#64748b", fontWeight: 500, marginBottom: "0.15rem" }}>
                     Detected at
                   </div>
-                  <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {selectedSession.time || "Recently"}
+                  <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#0f172a", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }} suppressHydrationWarning>
+                    {isMounted ? formatSessionTime(selectedSession.timestamp || selectedSession.lastSeenAt, selectedSession.time || "Recently") : (selectedSession.time || "Recently")}
                   </div>
                 </div>
               </div>
@@ -1320,8 +1358,8 @@ export default function TrafficInvestigation() {
                               {cleanUrlPath(ev.pageUrl)}
                             </span>
                           </div>
-                          <span style={{ color: "var(--tq-text-subtle)", whiteSpace: "nowrap", fontSize: "0.68rem" }}>
-                            {ev.formattedTime || `+${ev.elapsedSeconds || 0}s`}
+                          <span style={{ color: "var(--tq-text-subtle)", whiteSpace: "nowrap", fontSize: "0.68rem" }} suppressHydrationWarning>
+                            {isMounted ? formatTimelineTime(ev.timestamp, ev.formattedTime || `+${ev.elapsedSeconds || 0}s`) : (ev.formattedTime || `+${ev.elapsedSeconds || 0}s`)}
                           </span>
                         </div>
                       ))}

@@ -15,9 +15,22 @@ import {
   getRiskLevel,
 } from "./sessionAiRecommender.server";
 
-// Helper functions for dynamic date formatting
-function formatShortDate(date: Date): string {
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+// Helper functions for dynamic date formatting and timezone safety
+function sanitizeTimeZone(tz?: string): string | undefined {
+  if (!tz || typeof tz !== "string") return undefined;
+  const trimmed = tz.trim();
+  if (!trimmed) return undefined;
+  try {
+    Intl.DateTimeFormat(undefined, { timeZone: trimmed });
+    return trimmed;
+  } catch {
+    return undefined;
+  }
+}
+
+function formatShortDate(date: Date, timeZone?: string): string {
+  const validTz = sanitizeTimeZone(timeZone);
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", ...(validTz ? { timeZone: validTz } : {}) });
 }
 
 function formatDateRange(startDate: Date, endDate: Date): string {
@@ -55,6 +68,7 @@ export interface AnalyticsQueryOptions {
   startDate?: string | Date;
   endDate?: string | Date;
   isDemo?: boolean;
+  timeZone?: string;
 }
 
 // High-performance in-memory cache for fast sub-millisecond tab switching
@@ -250,6 +264,7 @@ export class AnalyticsService {
       customEnd = options.endDate;
     }
 
+    const timeZone = typeof options === "object" ? sanitizeTimeZone(options?.timeZone) : undefined;
     const currentRange = AnalyticsService.parseDateRange(dateRangeKey, customStart, customEnd);
     const compareRange = AnalyticsService.parseCompareRange(currentRange, compareRangeKey);
 
@@ -257,7 +272,7 @@ export class AnalyticsService {
     const rangeKey = currentRange.normalizedKey === "custom"
       ? `custom_${currentRange.startDate.toISOString().slice(0, 10)}_${currentRange.endDate.toISOString().slice(0, 10)}`
       : currentRange.normalizedKey;
-    const cacheKey = `${shopId}_${rangeKey}_${compareRange.normalizedKey}`;
+    const cacheKey = `${shopId}_${rangeKey}_${compareRange.normalizedKey}_${timeZone || ""}`;
     const cached = overviewCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data;
@@ -472,9 +487,9 @@ export class AnalyticsService {
       // Date label format: for "Today" or "Last 24 Hours" show time (e.g. 12 AM), for longer ranges show date (e.g. Sep 8)
       let label: string;
       if (currentRange.normalizedKey === "today" || currentRange.normalizedKey === "last_24_hours") {
-        label = bucketStart.toLocaleTimeString("en-US", { hour: "numeric", hour12: true });
+        label = bucketStart.toLocaleTimeString("en-US", { hour: "numeric", hour12: true, ...(timeZone ? { timeZone } : {}) });
       } else {
-        label = formatShortDate(bucketStart);
+        label = formatShortDate(bucketStart, timeZone);
       }
 
       dailyTrend.push({
@@ -599,7 +614,7 @@ export class AnalyticsService {
     });
 
     const detectedAt = latestSuspicious
-      ? `${formatShortDate(latestSuspicious.lastSeenAt)}, ${latestSuspicious.lastSeenAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })}`
+      ? `${formatShortDate(latestSuspicious.lastSeenAt, timeZone)}, ${latestSuspicious.lastSeenAt.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true, ...(timeZone ? { timeZone } : {}) })}`
       : "No anomalies in period";
 
     // Average risk of suspicious sessions for bot likelihood indicator
@@ -1034,6 +1049,7 @@ export class AnalyticsService {
       dateRange?: string;
       sortBy?: string;
       sortOrder?: "asc" | "desc";
+      timeZone?: string;
     }
   ): Promise<{
     sessions: ScoredSession[];
@@ -1050,7 +1066,7 @@ export class AnalyticsService {
     const limit = options?.limit || 8;
     const offset = options?.offset !== undefined ? options.offset : (page - 1) * limit;
 
-    const cacheKey = `inv_${shopId}_${page}_${limit}_${offset}_${options?.search || ""}_${options?.riskFilter || ""}_${options?.trafficType || ""}_${options?.sourceFilter || ""}_${options?.countryFilter || ""}_${options?.deviceFilter || ""}_${options?.severityFilter || ""}_${options?.dateRange || ""}_${options?.sortBy || ""}_${options?.sortOrder || ""}`;
+    const cacheKey = `inv_${shopId}_${page}_${limit}_${offset}_${options?.search || ""}_${options?.riskFilter || ""}_${options?.trafficType || ""}_${options?.sourceFilter || ""}_${options?.countryFilter || ""}_${options?.deviceFilter || ""}_${options?.severityFilter || ""}_${options?.dateRange || ""}_${options?.sortBy || ""}_${options?.sortOrder || ""}_${options?.timeZone || ""}`;
     const cached = investigationSessionsCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data;
@@ -1232,8 +1248,8 @@ export class AnalyticsService {
     const availableTrafficTypes = Array.from(new Set(allActiveFilterItems.map((s) => s.trafficType).filter(Boolean))) as string[];
 
     const sessions: ScoredSession[] = dbSessions.map((s) => {
-      const formatted = AnalyticsService.formatScoredSession(s);
-      sessionDetailCache.set(`detail_${shopId}_${s.id}`, { data: formatted, expiresAt: Date.now() + 60000 });
+      const formatted = AnalyticsService.formatScoredSession(s, options?.timeZone);
+      sessionDetailCache.set(`detail_${shopId}_${s.id}_${options?.timeZone || ""}`, { data: formatted, expiresAt: Date.now() + 60000 });
       return formatted;
     });
 
@@ -1260,7 +1276,7 @@ export class AnalyticsService {
    * Transforms a database TrafficSession into a fully typed and decorated ScoredSession,
    * including reasons, detection signals, timeline, and actions.
    */
-  static formatScoredSession(s: any): ScoredSession {
+  static formatScoredSession(s: any, timeZone?: string): ScoredSession {
     const riskLevel = getRiskLevel(s.riskScore ?? 0);
 
     let reasons: Array<{ title: string; desc: string; severity: "High" | "Medium" | "Low" }> = [];
@@ -1344,6 +1360,28 @@ export class AnalyticsService {
 
     const startedDate = s.startedAt instanceof Date ? s.startedAt : new Date(s.startedAt);
     const lastSeenDate = s.lastSeenAt instanceof Date ? s.lastSeenAt : new Date(s.lastSeenAt);
+    const validTz = sanitizeTimeZone(timeZone);
+
+    const tzOptionsTime: Intl.DateTimeFormatOptions = {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      ...(validTz ? { timeZone: validTz } : {}),
+    };
+
+    const tzOptionsTimeSec: Intl.DateTimeFormatOptions = {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
+      ...(validTz ? { timeZone: validTz } : {}),
+    };
+
+    const tzOptionsDate: Intl.DateTimeFormatOptions = {
+      month: "short",
+      day: "numeric",
+      ...(validTz ? { timeZone: validTz } : {}),
+    };
 
     let sessionTimeline = (s.events || []).map((ev: any) => {
       const evDate = ev.timestamp instanceof Date ? ev.timestamp : new Date(ev.timestamp);
@@ -1353,12 +1391,7 @@ export class AnalyticsService {
         eventType: ev.eventType,
         pageUrl: ev.pageUrl || "/",
         timestamp: evDate.toISOString(),
-        formattedTime: evDate.toLocaleTimeString("en-US", {
-          hour: "numeric",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: true,
-        }),
+        formattedTime: evDate.toLocaleTimeString("en-US", tzOptionsTimeSec),
         elapsedSeconds: elapsed,
       };
     });
@@ -1371,7 +1404,7 @@ export class AnalyticsService {
           eventType: "page_viewed",
           pageUrl: s.landingPage || "/",
           timestamp: new Date(baseTime).toISOString(),
-          formattedTime: startedDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
+          formattedTime: startedDate.toLocaleTimeString("en-US", tzOptionsTime),
           elapsedSeconds: 0,
         },
       ];
@@ -1381,7 +1414,7 @@ export class AnalyticsService {
           eventType: "product_viewed",
           pageUrl: "/products/featured-collection",
           timestamp: new Date(baseTime + 4000).toISOString(),
-          formattedTime: new Date(baseTime + 4000).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
+          formattedTime: new Date(baseTime + 4000).toLocaleTimeString("en-US", tzOptionsTime),
           elapsedSeconds: 4,
         });
       }
@@ -1391,7 +1424,7 @@ export class AnalyticsService {
           eventType: "product_added_to_cart",
           pageUrl: "/cart",
           timestamp: new Date(baseTime + 9000).toISOString(),
-          formattedTime: new Date(baseTime + 9000).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
+          formattedTime: new Date(baseTime + 9000).toLocaleTimeString("en-US", tzOptionsTime),
           elapsedSeconds: 9,
         });
       }
@@ -1401,17 +1434,14 @@ export class AnalyticsService {
           eventType: "checkout_started",
           pageUrl: "/checkout",
           timestamp: new Date(baseTime + 16000).toISOString(),
-          formattedTime: new Date(baseTime + 16000).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true }),
+          formattedTime: new Date(baseTime + 16000).toLocaleTimeString("en-US", tzOptionsTime),
           elapsedSeconds: 16,
         });
       }
     }
 
-    const timeStr = lastSeenDate.toLocaleTimeString("en-US", {
-      hour: "numeric",
-      minute: "2-digit",
-      hour12: true,
-    });
+    const timeStr = lastSeenDate.toLocaleTimeString("en-US", tzOptionsTime);
+    const dateStr = lastSeenDate.toLocaleDateString("en-US", tzOptionsDate);
 
     // Provide rich fallback recommendation if not already persisted or if old placeholder
     let computedRecommendation = s.aiRecommendation;
@@ -1458,7 +1488,7 @@ export class AnalyticsService {
       confidence: s.detectionResult?.confidence || (s.riskScore > 80 ? 94 : s.riskScore >= 50 ? 82 : 90),
       source: s.utmSource || s.referrer || "Direct",
       campaign: s.utmCampaign || "None",
-      time: `${formatShortDate(lastSeenDate)}, ${timeStr}`,
+      time: `${dateStr}, ${timeStr}`,
       timestamp: lastSeenDate.toISOString(),
       country: s.country,
       countryFlag: s.countryFlag,
@@ -1493,9 +1523,9 @@ export class AnalyticsService {
   /**
    * Retrieves full rich detail for a single session.
    */
-  static async getSessionDetail(shopId: string, sessionId: string): Promise<ScoredSession | null> {
+  static async getSessionDetail(shopId: string, sessionId: string, timeZone?: string): Promise<ScoredSession | null> {
     const cleanId = sessionId.replace(/^#/, "");
-    const cacheKey = `detail_${shopId}_${cleanId}`;
+    const cacheKey = `detail_${shopId}_${cleanId}_${timeZone || ""}`;
     const cached = sessionDetailCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
       return cached.data;
@@ -1531,7 +1561,7 @@ export class AnalyticsService {
 
     if (!session) return null;
 
-    const detailResult = AnalyticsService.formatScoredSession(session);
+    const detailResult = AnalyticsService.formatScoredSession(session, timeZone);
 
     // If session doesn't have a persisted Groq recommendation, generate one with Groq and persist it
     if (!session.aiRecommendation || session.aiRecommendation.startsWith("Recommendation: ")) {
