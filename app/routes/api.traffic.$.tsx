@@ -56,10 +56,10 @@ async function resolveAuthenticatedShop(request: Request): Promise<{ shopId: str
       }
     }
 
-    // 4. Default to first active shop in development if available
+    // 4. Default to most recently active shop in development if available
     const defaultShop = await prisma.shop.findFirst({
       where: { status: "ACTIVE" },
-      orderBy: { createdAt: "asc" },
+      orderBy: { updatedAt: "desc" },
     });
     if (defaultShop) {
       return { shopId: defaultShop.id, shopDomain: defaultShop.shopDomain };

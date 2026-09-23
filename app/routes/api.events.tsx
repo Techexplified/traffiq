@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
 import { processIngestionEvent, type IngestionEventPayload } from "../services/sessionAggregator.server";
+import { getShopByDomain } from "../services/shop.server";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -139,24 +140,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       .split(":")[0]
       .toLowerCase();
 
-    let shop = cleanDomain
-      ? await prisma.shop.findFirst({
-          where: {
-            OR: [
-              { shopDomain: cleanDomain },
-              { shopDomain: `${cleanDomain}.myshopify.com` },
-              { shopDomain: { startsWith: cleanDomain.split(".")[0] } },
-            ],
-            status: "ACTIVE",
-          },
-        })
-      : null;
+    let shop = cleanDomain ? await getShopByDomain(cleanDomain) : null;
+    if (!shop && candidateDomain) {
+      shop = await getShopByDomain(candidateDomain);
+    }
 
-    // In dev / single-store installations, fallback to first active shop if candidate was omitted
+    // In dev / single-store installations, fallback to most recently updated active shop if candidate was omitted
     if (!shop) {
       shop = await prisma.shop.findFirst({
         where: { status: "ACTIVE" },
-        orderBy: { createdAt: "asc" },
+        orderBy: { updatedAt: "desc" },
       });
     }
 

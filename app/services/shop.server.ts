@@ -61,14 +61,126 @@ export async function fetchShopDataFromAdmin(
   return shopData;
 }
 
-export async function getShopByDomain(shopDomain: string) {
-  return await prisma.shop.findUnique({
-    where: { shopDomain },
-    include: {
-      settings: true,
-    },
+export async function getShopByDomain(rawDomain: string) {
+  if (!rawDomain) return null;
+  const cleanDomain = rawDomain
+    .replace(/^https?:\/\//, "")
+    .split("/")[0]
+    .split(":")[0]
+    .trim()
+    .toLowerCase();
+
+  // Try exact match first
+  let shop = await prisma.shop.findUnique({
+    where: { shopDomain: cleanDomain },
+    include: { settings: true },
   });
+  if (shop) return shop;
+
+  // Try with .myshopify.com suffix if not present
+  if (!cleanDomain.endsWith(".myshopify.com")) {
+    shop = await prisma.shop.findUnique({
+      where: { shopDomain: `${cleanDomain}.myshopify.com` },
+      include: { settings: true },
+    });
+    if (shop) return shop;
+  }
+
+  // Try finding by prefix match
+  const prefix = cleanDomain.split(".")[0];
+  shop = await prisma.shop.findFirst({
+    where: {
+      OR: [
+        { shopDomain: { startsWith: prefix } },
+        { shopDomain: { contains: prefix } },
+      ],
+      status: "ACTIVE",
+    },
+    include: { settings: true },
+  });
+  return shop;
 }
+
+export async function ensureWebPixelSynchronized(
+  admin: { graphql: (query: string, options?: any) => Promise<Response> },
+  shopDomain: string,
+  appUrl: string
+): Promise<{ success: boolean; pixelId?: string; action: "created" | "updated" | "current" | "failed" }> {
+  try {
+    const cleanAppUrl = (appUrl || "https://traffiq-smoky.vercel.app").replace(/\/+$/, "");
+    let existingPixelId: string | null = null;
+    let existingSettings: { appUrl?: string } = {};
+
+    try {
+      const queryRes = await admin.graphql(
+        `#graphql
+        query getWebPixel {
+          webPixel {
+            id
+            settings
+          }
+        }`
+      );
+      const queryJson = await queryRes.json();
+      if (queryJson?.data?.webPixel?.id) {
+        existingPixelId = queryJson.data.webPixel.id;
+        try {
+          existingSettings = JSON.parse(queryJson.data.webPixel.settings || "{}");
+        } catch {}
+      }
+    } catch (queryErr) {
+      console.log(`[WebPixel Sync] Query check on ${shopDomain} (proceeding to create if needed):`, queryErr);
+    }
+
+    if (existingPixelId) {
+      if (existingSettings.appUrl !== cleanAppUrl) {
+        const updateRes = await admin.graphql(
+          `#graphql
+          mutation webPixelUpdate($id: ID!, $webPixel: WebPixelInput!) {
+            webPixelUpdate(id: $id, webPixel: $webPixel) {
+              userErrors { field message }
+              webPixel { id settings }
+            }
+          }`,
+          {
+            variables: {
+              id: existingPixelId,
+              webPixel: { settings: JSON.stringify({ appUrl: cleanAppUrl }) },
+            },
+          }
+        );
+        const updateJson = await updateRes.json();
+        console.log(`[WebPixel Sync] Updated Web Pixel on ${shopDomain}:`, JSON.stringify(updateJson));
+        return { success: true, pixelId: existingPixelId, action: "updated" };
+      }
+      return { success: true, pixelId: existingPixelId, action: "current" };
+    }
+
+    // Create new Web Pixel
+    const createRes = await admin.graphql(
+      `#graphql
+      mutation webPixelCreate($webPixel: WebPixelInput!) {
+        webPixelCreate(webPixel: $webPixel) {
+          userErrors { field message }
+          webPixel { id settings }
+        }
+      }`,
+      {
+        variables: {
+          webPixel: { settings: JSON.stringify({ appUrl: cleanAppUrl }) },
+        },
+      }
+    );
+    const createJson = await createRes.json();
+    const createdId = createJson?.data?.webPixelCreate?.webPixel?.id;
+    console.log(`[WebPixel Sync] Created Web Pixel on ${shopDomain}:`, JSON.stringify(createJson));
+    return { success: Boolean(createdId), pixelId: createdId, action: "created" };
+  } catch (err) {
+    console.error(`[WebPixel Sync] Error synchronizing web pixel on ${shopDomain}:`, err);
+    return { success: false, action: "failed" };
+  }
+}
+
 
 export async function recordAuditLog(
   shopId: string,

@@ -24,10 +24,18 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     shopId = shop?.id || session.shop;
     shopDomain = session.shop;
   } catch {
-    const defaultShop = await prisma.shop.findFirst({ where: { status: "ACTIVE" } });
-    if (defaultShop) {
-      shopId = defaultShop.id;
-      shopDomain = defaultShop.shopDomain;
+    const url = new URL(request.url);
+    const shopParam = url.searchParams.get("shop");
+    let foundShop = shopParam ? await getShopByDomain(shopParam) : null;
+    if (!foundShop) {
+      foundShop = await prisma.shop.findFirst({
+        where: { status: "ACTIVE" },
+        orderBy: { updatedAt: "desc" },
+      });
+    }
+    if (foundShop) {
+      shopId = foundShop.id;
+      shopDomain = foundShop.shopDomain;
     }
   }
 
@@ -62,9 +70,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const shop = await getShopByDomain(session.shop);
     shopId = shop?.id || session.shop;
   } catch {
-    const defaultShop = await prisma.shop.findFirst({ where: { status: "ACTIVE" } });
-    if (defaultShop) {
-      shopId = defaultShop.id;
+    const url = new URL(request.url);
+    const shopParam = url.searchParams.get("shop");
+    let foundShop = shopParam ? await getShopByDomain(shopParam) : null;
+    if (!foundShop) {
+      foundShop = await prisma.shop.findFirst({
+        where: { status: "ACTIVE" },
+        orderBy: { updatedAt: "desc" },
+      });
+    }
+    if (foundShop) {
+      shopId = foundShop.id;
     }
   }
 

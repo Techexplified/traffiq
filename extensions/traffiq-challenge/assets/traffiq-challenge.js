@@ -190,8 +190,104 @@
     return currentStatusPromise;
   }
 
+  // ==========================================
+  // STOREFRONT TELEMETRY INGESTION (Dual-Layer)
+  // ==========================================
+  var lastReportedEvents = {};
+
+  function extractCartProductDetails(elOrForm) {
+    var details = {};
+    try {
+      var root = elOrForm ? (elOrForm.closest ? (elOrForm.closest("form") || elOrForm) : elOrForm) : null;
+      if (root) {
+        var idInput = root.querySelector ? root.querySelector('input[name="id"], select[name="id"]') : null;
+        if (idInput && idInput.value) details.variantId = idInput.value;
+        var qtyInput = root.querySelector ? root.querySelector('input[name="quantity"]') : null;
+        if (qtyInput && qtyInput.value) details.quantity = parseInt(qtyInput.value, 10) || 1;
+        if (root.dataset && root.dataset.productId) details.productId = root.dataset.productId;
+        if (root.dataset && root.dataset.variantId) details.variantId = root.dataset.variantId;
+      }
+      if (window.meta && window.meta.product && window.meta.product.id) {
+        details.productId = details.productId || String(window.meta.product.id);
+      }
+    } catch (e) {}
+    return details;
+  }
+
+  function reportStorefrontEvent(eventType, extraData) {
+    try {
+      var now = Date.now();
+      var extra = extraData || {};
+      var dedupeKey = eventType + "_" + (extra.variantId || extra.productId || window.location.pathname);
+      if (lastReportedEvents[dedupeKey] && now - lastReportedEvents[dedupeKey] < 1800) {
+        return; // Client-side 1.8s debounce
+      }
+      lastReportedEvents[dedupeKey] = now;
+
+      var cid = getCid();
+      var sid = getSid();
+      var pageUrl = window.location.href;
+      var targetUrl = (appUrl || PROD_URL) + "/api/events?shop=" + encodeURIComponent(shop);
+
+      var utm = {};
+      try {
+        var parsedUrl = new URL(pageUrl);
+        utm = {
+          source: parsedUrl.searchParams.get("utm_source") || undefined,
+          medium: parsedUrl.searchParams.get("utm_medium") || undefined,
+          campaign: parsedUrl.searchParams.get("utm_campaign") || undefined,
+        };
+      } catch (e) {}
+
+      var payload = {
+        eventId: "tq_sf_" + now + "_" + Math.random().toString(36).slice(2, 8),
+        eventType: eventType,
+        timestamp: new Date(now).toISOString(),
+        clientId: cid || "",
+        sessionId: sid || "",
+        shopDomain: shop,
+        page: pageUrl,
+        referrer: document.referrer || "",
+        utm: utm,
+        productId: extra.productId || undefined,
+        variantId: extra.variantId || undefined,
+        quantity: extra.quantity || 1,
+        totalCost: extra.totalCost || undefined,
+        metadata: {
+          ...extra,
+          source: "traffiq_theme_embed",
+          userAgent: navigator.userAgent || "",
+        },
+      };
+
+      var body = JSON.stringify(payload);
+
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon(targetUrl, new Blob([body], { type: "application/json" }));
+      } else if (typeof fetch === "function") {
+        fetch(targetUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: body,
+          keepalive: true,
+          mode: "cors",
+        }).catch(function () {});
+      }
+    } catch (e) {
+      // Non-blocking fail-safe
+    }
+  }
+
   // Initial protection status check
   initProtection(appUrl);
+
+  // Report initial storefront telemetry
+  reportStorefrontEvent("page_viewed");
+  if (window.location.pathname.indexOf("/products/") !== -1) {
+    reportStorefrontEvent("product_viewed", extractCartProductDetails(document));
+  } else if (window.location.pathname.indexOf("/collections/") !== -1) {
+    reportStorefrontEvent("collection_viewed");
+  }
 
   // Auto-refresh protection status when tab regains focus (e.g. merchant blocked session in Admin tab)
   document.addEventListener("visibilitychange", function () {
@@ -319,6 +415,16 @@
         return false;
       }
     }
+
+    // Telemetry: report add-to-cart on valid button click
+    var isAddBtn = (btn.name === "add") ||
+      (btn.getAttribute && btn.getAttribute("name") === "add") ||
+      (btn.classList && (btn.classList.contains("add-to-cart") || btn.classList.contains("product-form__submit"))) ||
+      (btn.closest && (btn.closest('[data-add-to-cart]') || btn.closest('form[action*="/cart/add"]')));
+
+    if (isAddBtn && !isCurrentlyBlocked()) {
+      reportStorefrontEvent("product_added_to_cart", extractCartProductDetails(btn));
+    }
   }, true);
 
   // Intercept Form Submit events in Capture Phase
@@ -327,6 +433,10 @@
     var act = (form && form.getAttribute ? form.getAttribute("action") : "") || "";
     var isCartSubmit = act.indexOf("/cart/add") !== -1 || act.indexOf("/cart") !== -1 || act.indexOf("/checkout") !== -1;
     if (!isCartSubmit) return;
+
+    if (act.indexOf("/cart/add") !== -1 && !isCurrentlyBlocked()) {
+      reportStorefrontEvent("product_added_to_cart", extractCartProductDetails(form));
+    }
 
     if (isCurrentlyBlocked()) {
       console.log("[Traffiq Protection] 🛑 Blocked form submit for restricted session.");
@@ -396,6 +506,10 @@
       url.indexOf("/checkout") !== -1
     );
 
+    if (url && (url.indexOf("/cart/add") !== -1 || url.indexOf("/cart/add.js") !== -1) && !isCurrentlyBlocked()) {
+      reportStorefrontEvent("product_added_to_cart", extractCartProductDetails(document));
+    }
+
     if (isCartUrl) {
       if (isCurrentlyBlocked()) {
         console.log("[Traffiq Protection] 🛑 Blocked fetch request for restricted session:", url);
@@ -427,6 +541,10 @@
     return origOpen.apply(this, arguments);
   };
   XMLHttpRequest.prototype.send = function () {
+    if (this._tq_url && (this._tq_url.indexOf("/cart/add") !== -1 || this._tq_url.indexOf("/cart/add.js") !== -1) && !isCurrentlyBlocked()) {
+      reportStorefrontEvent("product_added_to_cart", extractCartProductDetails(document));
+    }
+
     if (this._tq_url && (this._tq_url.indexOf("/cart/add") !== -1 || this._tq_url.indexOf("/checkout") !== -1)) {
       if (isCurrentlyBlocked()) {
         console.log("[Traffiq Protection] 🛑 Blocked XHR request for restricted session:", this._tq_url);
