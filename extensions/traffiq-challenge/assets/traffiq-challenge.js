@@ -103,6 +103,14 @@
         var sessY = window.sessionStorage.getItem("_shopify_y") || window.sessionStorage.getItem("traffiq_client_id");
         if (sessY) return String(sessY).replace(/^["']+|["']+$/g, "").trim();
       }
+
+      // Generate and store persistent visitor ID across cookies and storage
+      var genId = "tqc_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
+      try {
+        if (window.localStorage) window.localStorage.setItem("traffiq_client_id", genId);
+        document.cookie = "traffiq_client_id=" + genId + ";path=/;max-age=31536000;SameSite=Lax";
+      } catch (e) {}
+      return genId;
     } catch (e) {}
     return "";
   }
@@ -148,6 +156,7 @@
             sessionStorage.removeItem(KEY);
           } catch (e) {}
           console.log("[Traffiq Protection] 🛑 Hard Block Active (" + (d.reason || d.severity) + "). Checkout & cart access restricted.");
+          showModal();
         } else if (d && d.challengeRequired) {
           try {
             sessionStorage.removeItem(BLOCKED_KEY);
@@ -286,6 +295,21 @@
     }
   }
 
+  function onDomReady(fn) {
+    if (document.readyState === "complete" || document.readyState === "interactive") {
+      setTimeout(fn, 1);
+    } else {
+      document.addEventListener("DOMContentLoaded", fn);
+    }
+  }
+
+  // If already flagged blocked in storage, show restricted overlay as soon as DOM is ready
+  if (isBlockedStored) {
+    onDomReady(function () {
+      showModal();
+    });
+  }
+
   // Initial protection status check
   initProtection(appUrl);
 
@@ -348,18 +372,23 @@
   ].join(",");
 
   function isCartOrCheckoutElement(el) {
-    if (!el || !el.closest) return null;
-    var btn = el.closest(CART_SELECTORS);
-    if (btn) return btn;
-
-    var form = el.closest('form[action*="/cart/add"],form[action*="/cart"],form[action*="/checkout"]');
-    if (form && (el.tagName === "BUTTON" || (el.tagName === "INPUT" && (el.type === "submit" || el.type === "button")) || el.closest("button"))) {
-      return el.closest("button") || el;
+    if (!el) return null;
+    var cur = el;
+    while (cur && cur !== document.body && cur !== document.documentElement) {
+      if (cur.matches && cur.matches(CART_SELECTORS)) return cur;
+      if (cur.tagName === "BUTTON" || (cur.tagName === "INPUT" && (cur.type === "submit" || cur.type === "button"))) {
+        var f = cur.form || (cur.closest && cur.closest("form"));
+        var act = f ? (f.getAttribute("action") || "") : "";
+        if (act.indexOf("/cart") !== -1 || act.indexOf("/checkout") !== -1) return cur;
+        var fId = f ? (f.id || "") : "";
+        if (fId.indexOf("product-form") !== -1 || fId.indexOf("cart") !== -1) return cur;
+      }
+      if (cur.tagName === "A") {
+        var href = cur.getAttribute("href") || "";
+        if (href.indexOf("/checkout") !== -1 || href.indexOf("/cart") !== -1) return cur;
+      }
+      cur = cur.parentElement;
     }
-
-    var a = el.closest('a[href*="/checkout"],a[href*="/cart"]');
-    if (a) return a;
-
     return null;
   }
 
@@ -763,10 +792,18 @@
       box.className = "tq-captcha-box tq-verifying";
       txt.innerHTML = '<span class="tq-spinner"></span> Verifying...';
       txt.style.opacity = "1";
+      var cid = getCid();
+      var sid = getSid();
       fetch(appUrl + "/api/protection/verify-challenge?shop=" + encodeURIComponent(shop), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ shopDomain: shop, answer: "slider_verified", timestamp: Date.now() }),
+        body: JSON.stringify({
+          shopDomain: shop,
+          clientId: cid,
+          sessionKey: sid || cid,
+          answer: "slider_verified",
+          timestamp: Date.now()
+        }),
       })
         .finally(function () {
           box.className = "tq-captcha-box tq-success";

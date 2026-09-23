@@ -81,25 +81,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    // Find or locate active session for this client
-    let session = sessionKey
-      ? await prisma.trafficSession.findFirst({
-          where: {
-            shopId: shop.id,
-            sessionKey,
-          },
-          orderBy: { lastSeenAt: "desc" },
-        })
-      : null;
+    const clientIp =
+      request.headers.get("cf-connecting-ip") ||
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "127.0.0.1";
+    const anonKey = `anon_${clientIp.replace(/[^a-zA-Z0-9]/g, "_")}`;
+
+    const candidateKeys = [
+      sessionKey,
+      typeof body.clientId === "string" ? body.clientId : null,
+      typeof body.sessionId === "string" ? body.sessionId : null,
+      anonKey,
+    ].filter((k): k is string => typeof k === "string" && k.trim().length > 0);
+
+    // Find or locate active session for this client across candidate keys
+    let session = await prisma.trafficSession.findFirst({
+      where: {
+        shopId: shop.id,
+        OR: candidateKeys.map((k) => ({ sessionKey: k })),
+      },
+      orderBy: { lastSeenAt: "desc" },
+    });
 
     if (session) {
-      // Mark session as verified human and reset risk score
-      session = await prisma.trafficSession.update({
-        where: { id: session.id },
+      // Mark matching sessions as verified human and reset risk score
+      await prisma.trafficSession.updateMany({
+        where: {
+          shopId: shop.id,
+          OR: candidateKeys.map((k) => ({ sessionKey: k })),
+        },
         data: {
           trafficType: "HUMAN",
-          riskScore: Math.min(session.riskScore, 10),
+          riskScore: 10,
           severity: "LOW",
+          isFlagged: false,
         },
       });
 
@@ -114,7 +129,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           metadata: JSON.stringify({
             verifiedAt: new Date().toISOString(),
             challengeType: "interactive_captcha",
-            sessionKey,
+            sessionKey: sessionKey || candidateKeys[0],
+            candidateKeys,
           }),
         },
       });

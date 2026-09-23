@@ -325,7 +325,6 @@ export async function processIngestionEvent(
     // Check if this visitor/sessionKey was previously manually blocked by merchant
     const wasManuallyBlocked = await prisma.protectionAction.findFirst({
       where: {
-        shopId,
         action: "BLOCK",
         status: "EXECUTED",
         OR: [
@@ -333,6 +332,7 @@ export async function processIngestionEvent(
           { metadata: { contains: sessionKey } },
         ],
       },
+      orderBy: { createdAt: "desc" },
     });
 
     // Start new TrafficSession

@@ -95,19 +95,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return Response.json({ error: "Missing sessionId" }, { status: 400 });
   }
 
-  const sessionRecord = await prisma.trafficSession.findFirst({
-    where: { id: sessionId, shopId },
+  // Resolve the session directly by its unique ID so blocking works reliably regardless of admin session shop resolution
+  const sessionRecord = await prisma.trafficSession.findUnique({
+    where: { id: sessionId },
+    include: { shop: true },
   });
 
   if (!sessionRecord) {
     return Response.json({ error: "Session not found" }, { status: 404 });
   }
 
+  const sessionShopId = sessionRecord.shopId;
+
   if (actionType === "block_session") {
     // 1. Create or ensure ProtectionAction with BLOCK
     await prisma.protectionAction.create({
       data: {
-        shopId,
+        shopId: sessionShopId,
         sessionId: sessionRecord.id,
         action: "BLOCK",
         status: "EXECUTED",
@@ -123,7 +127,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     // 2. Mark session and any sessions sharing this sessionKey as flagged and blocked
     await prisma.trafficSession.updateMany({
       where: {
-        shopId,
         OR: [
           { id: sessionRecord.id },
           { sessionKey: sessionRecord.sessionKey },
@@ -140,7 +143,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     // 3. Invalidate caches so UI & overview update immediately
-    invalidateSessionCache(shopId, sessionRecord.id);
+    invalidateSessionCache(sessionShopId, sessionRecord.id);
 
     // 4. Audit log
     await prisma.auditLog.create({

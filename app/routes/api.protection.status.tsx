@@ -19,7 +19,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const rawSessionKey = url.searchParams.get("sessionKey");
     const rawSessionId = url.searchParams.get("sessionId");
 
-    const candidateKeys = [rawClientId, rawSessionKey, rawSessionId]
+    const clientIp =
+      request.headers.get("cf-connecting-ip") ||
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "127.0.0.1";
+    const anonKey = `anon_${clientIp.replace(/[^a-zA-Z0-9]/g, "_")}`;
+
+    const candidateKeys = [rawClientId, rawSessionKey, rawSessionId, anonKey]
       .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
       .map((k) => k.replace(/^["']+|["']+$/g, "").trim());
 
@@ -240,12 +246,23 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       isManuallyBlocked ||
       (protectionMode === "BLOCK" && autoProtect && isAutomatedBotThreat);
 
+    const isTestOverride =
+      url.searchParams.get("test_challenge") === "1" ||
+      url.searchParams.get("simulate_high_severity") === "1";
+
     const challengeRequired =
       !isManuallyBlocked &&
-      protectionMode === "CHALLENGE" &&
-      autoProtect &&
       !isVerified &&
-      (sessionRiskScore >= 60 || sessionTrafficType === "BOT" || sessionSeverity === "HIGH" || sessionSeverity === "CRITICAL");
+      (
+        isTestOverride ||
+        (protectionMode === "CHALLENGE" &&
+          autoProtect &&
+          (sessionRiskScore >= 50 ||
+            sessionTrafficType === "BOT" ||
+            sessionTrafficType === "SUSPICIOUS" ||
+            sessionSeverity === "HIGH" ||
+            sessionSeverity === "CRITICAL"))
+      );
 
     return new Response(
       JSON.stringify({

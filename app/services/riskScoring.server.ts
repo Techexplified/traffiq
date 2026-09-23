@@ -37,26 +37,33 @@ export class RiskScoringService {
   ): RuleEvaluationResult {
     const reasons: string[] = [];
     const effectiveSec = Math.max(1, durationSec);
-    const rpm = (session.requestCount / effectiveSec) * 60;
 
-    // Extreme burst detection (10+ requests in 2 seconds or less)
+    // Extreme burst detection (10+ requests in 2.5 seconds or less)
     if (session.requestCount >= 10 && effectiveSec <= 2.5) {
       reasons.push("Extreme request burst: 10+ actions executed within 2 seconds");
       return { score: 98, reasons, description: "Extreme burst velocity (> 240 RPM)" };
     }
 
-    // High velocity rules
-    if (rpm >= config.heuristics.extremeRPM) {
+    // For 1-2 initial requests, calculating RPM (e.g. 1 req / 1s = 60 RPM) is mathematically misleading.
+    // Human page visits start with 1 or 2 requests without being a high-velocity burst.
+    if (session.requestCount < 3 && effectiveSec < 15) {
+      return { score: 5, reasons: [], description: "Initial browsing pace (normal)" };
+    }
+
+    const rpm = (session.requestCount / effectiveSec) * 60;
+
+    // High velocity rules for established sessions
+    if (rpm >= config.heuristics.extremeRPM && session.requestCount >= 4) {
       reasons.push(`Abnormally high request frequency (${Math.round(rpm)} RPM; 3x faster than human baseline)`);
       return { score: 90, reasons, description: `Extreme velocity (${Math.round(rpm)} RPM)` };
     }
 
-    if (rpm > config.heuristics.humanMaxRPM) {
+    if (rpm > config.heuristics.humanMaxRPM && session.requestCount >= 3) {
       reasons.push(`Elevated request velocity (${Math.round(rpm)} RPM; exceeds typical ecommerce browsing pace)`);
       return { score: 65, reasons, description: `Elevated velocity (${Math.round(rpm)} RPM)` };
     }
 
-    if (rpm > 12) {
+    if (rpm > 12 && session.requestCount >= 3) {
       return { score: 30, reasons, description: `Moderate browsing velocity (${Math.round(rpm)} RPM)` };
     }
 
@@ -78,7 +85,7 @@ export class RiskScoringService {
     const pageViews = Math.max(1, session.pageViews);
     const avgDwellSec = effectiveSec / pageViews;
 
-    // Sub-second multi-page hopping
+    // Sub-second multi-page hopping across 4+ pages
     if (pageViews >= 4 && avgDwellSec < 1.5) {
       reasons.push("Rapid-fire page navigation with sub-1.5s reader dwell times");
       return { score: 92, reasons, description: `Sub-1.5s average dwell time (${avgDwellSec.toFixed(1)}s/page)` };
@@ -89,10 +96,9 @@ export class RiskScoringService {
       return { score: 75, reasons, description: `Low dwell time (${avgDwellSec.toFixed(1)}s/page)` };
     }
 
-    // Single-page instant bounce
-    if (pageViews === 1 && effectiveSec <= config.heuristics.minShortSessionSeconds) {
-      reasons.push(`Instant bounce session lasting < ${config.heuristics.minShortSessionSeconds} seconds`);
-      return { score: 45, reasons, description: `Instant bounce (< ${config.heuristics.minShortSessionSeconds}s duration)` };
+    // Active single-page landing visit is normal human engagement
+    if (pageViews === 1) {
+      return { score: 5, reasons: [], description: "Active landing page engagement" };
     }
 
     if (avgDwellSec >= config.heuristics.normalDwellSeconds) {
