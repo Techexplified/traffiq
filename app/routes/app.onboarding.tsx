@@ -28,7 +28,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const initialStep = dbShop?.onboardingStep || 1;
 
   const cleanShop = session.shop.replace(".myshopify.com", "");
-  const apiKey = process.env.SHOPIFY_API_KEY || "756e05704f05bf7d737d3e0e517ece64";
+  const apiKey = process.env.SHOPIFY_API_KEY || "add5a28769a30d6564929931f077bf84";
   const themeEditorUrl = `https://admin.shopify.com/store/${cleanShop}/themes/current/editor?context=apps&activateAppId=${apiKey}/traffiq_challenge`;
 
   return {

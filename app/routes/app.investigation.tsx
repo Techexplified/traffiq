@@ -61,6 +61,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     availableDevices: sessionsData.availableDevices,
     availableTrafficTypes: sessionsData.availableTrafficTypes,
     shopDomain,
+    themeEditorUrl: `https://admin.shopify.com/store/${shopDomain.replace(".myshopify.com", "")}/themes/current/editor?context=apps&activateAppId=${process.env.SHOPIFY_API_KEY || "add5a28769a30d6564929931f077bf84"}/traffiq_challenge`,
     protectionMode: shopSettings?.protectionMode || metrics.protection?.mode || "MONITOR",
   };
 };
