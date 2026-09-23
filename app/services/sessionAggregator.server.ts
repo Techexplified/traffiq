@@ -45,6 +45,8 @@ export interface IngestionEventPayload {
   country?: string;
   city?: string;
   region?: string;
+  timezone?: string;
+  locale?: string;
 }
 
 export function parseDeviceFromUserAgent(ua: string): {
@@ -95,20 +97,179 @@ export function parseDeviceFromUserAgent(ua: string): {
   return { deviceType, browser, os };
 }
 
+export interface ResolvedCountry {
+  country: string;
+  countryFlag: string;
+  countryCode: string;
+}
+
+export const ISO_COUNTRY_MAP: Record<string, { name: string; flag: string }> = {
+  IN: { name: "India", flag: "🇮🇳" },
+  US: { name: "United States", flag: "🇺🇸" },
+  GB: { name: "United Kingdom", flag: "🇬🇧" },
+  UK: { name: "United Kingdom", flag: "🇬🇧" },
+  CA: { name: "Canada", flag: "🇨🇦" },
+  AU: { name: "Australia", flag: "🇦🇺" },
+  DE: { name: "Germany", flag: "🇩🇪" },
+  FR: { name: "France", flag: "🇫🇷" },
+  NL: { name: "Netherlands", flag: "🇳🇱" },
+  JP: { name: "Japan", flag: "🇯🇵" },
+  SG: { name: "Singapore", flag: "🇸🇬" },
+  BR: { name: "Brazil", flag: "🇧🇷" },
+  AE: { name: "United Arab Emirates", flag: "🇦🇪" },
+  SA: { name: "Saudi Arabia", flag: "🇸🇦" },
+  PK: { name: "Pakistan", flag: "🇵🇰" },
+  BD: { name: "Bangladesh", flag: "🇧🇩" },
+  ID: { name: "Indonesia", flag: "🇮🇩" },
+  MY: { name: "Malaysia", flag: "🇲🇾" },
+  PH: { name: "Philippines", flag: "🇵🇭" },
+  VN: { name: "Vietnam", flag: "🇻🇳" },
+  TH: { name: "Thailand", flag: "🇹🇭" },
+  NZ: { name: "New Zealand", flag: "🇳🇿" },
+  IT: { name: "Italy", flag: "🇮🇹" },
+  ES: { name: "Spain", flag: "🇪🇸" },
+  CH: { name: "Switzerland", flag: "🇨🇭" },
+  SE: { name: "Sweden", flag: "🇸🇪" },
+  NO: { name: "Norway", flag: "🇳🇴" },
+  DK: { name: "Denmark", flag: "🇩🇰" },
+  FI: { name: "Finland", flag: "🇫🇮" },
+  IE: { name: "Ireland", flag: "🇮🇪" },
+  PL: { name: "Poland", flag: "🇵🇱" },
+  ZA: { name: "South Africa", flag: "🇿🇦" },
+  MX: { name: "Mexico", flag: "🇲🇽" },
+  RU: { name: "Russia", flag: "🇷🇺" },
+  CN: { name: "China", flag: "🇨🇳" },
+  HK: { name: "Hong Kong", flag: "🇭🇰" },
+  KR: { name: "South Korea", flag: "🇰🇷" },
+  TW: { name: "Taiwan", flag: "🇹🇼" },
+  TR: { name: "Turkey", flag: "🇹🇷" },
+  IL: { name: "Israel", flag: "🇮🇱" },
+  EG: { name: "Egypt", flag: "🇪🇬" },
+  NG: { name: "Nigeria", flag: "🇳🇬" },
+  KE: { name: "Kenya", flag: "🇰🇪" },
+  AR: { name: "Argentina", flag: "🇦🇷" },
+  CL: { name: "Chile", flag: "🇨🇱" },
+  CO: { name: "Colombia", flag: "🇨🇴" },
+};
+
+const TIMEZONE_COUNTRY_MAP: Record<string, string> = {
+  "Asia/Kolkata": "IN",
+  "Asia/Calcutta": "IN",
+  "Asia/Delhi": "IN",
+  "Asia/Karachi": "PK",
+  "Asia/Dhaka": "BD",
+  "Asia/Dubai": "AE",
+  "Asia/Riyadh": "SA",
+  "Asia/Singapore": "SG",
+  "Asia/Tokyo": "JP",
+  "Asia/Seoul": "KR",
+  "Asia/Shanghai": "CN",
+  "Asia/Hong_Kong": "HK",
+  "Asia/Taipei": "TW",
+  "Asia/Bangkok": "TH",
+  "Asia/Jakarta": "ID",
+  "Asia/Kuala_Lumpur": "MY",
+  "Asia/Manila": "PH",
+  "Europe/London": "GB",
+  "Europe/Dublin": "IE",
+  "Europe/Paris": "FR",
+  "Europe/Berlin": "DE",
+  "Europe/Rome": "IT",
+  "Europe/Madrid": "ES",
+  "Europe/Amsterdam": "NL",
+  "Europe/Brussels": "BE",
+  "Europe/Stockholm": "SE",
+  "Europe/Oslo": "NO",
+  "Europe/Copenhagen": "DK",
+  "Europe/Helsinki": "FI",
+  "Europe/Warsaw": "PL",
+  "Europe/Zurich": "CH",
+  "Europe/Vienna": "AT",
+  "Australia/Sydney": "AU",
+  "Australia/Melbourne": "AU",
+  "Australia/Brisbane": "AU",
+  "Australia/Perth": "AU",
+  "Pacific/Auckland": "NZ",
+  "America/New_York": "US",
+  "America/Chicago": "US",
+  "America/Denver": "US",
+  "America/Los_Angeles": "US",
+  "America/Phoenix": "US",
+  "America/Detroit": "US",
+  "America/Indiana/Indianapolis": "US",
+  "America/Toronto": "CA",
+  "America/Vancouver": "CA",
+  "America/Montreal": "CA",
+  "America/Sao_Paulo": "BR",
+  "America/Mexico_City": "MX",
+  "America/Bogota": "CO",
+  "America/Buenos_Aires": "AR",
+  "America/Santiago": "CL",
+  "Africa/Johannesburg": "ZA",
+  "Africa/Cairo": "EG",
+  "Africa/Lagos": "NG",
+  "Africa/Nairobi": "KE",
+};
+
+export function resolveCountryAndFlag(options?: {
+  rawCountry?: string;
+  timezone?: string;
+  locale?: string;
+}): ResolvedCountry {
+  const raw = (options?.rawCountry || "").trim();
+  const upper = raw.toUpperCase();
+
+  // 1. Direct match on 2-letter ISO code
+  if (upper && ISO_COUNTRY_MAP[upper]) {
+    const entry = ISO_COUNTRY_MAP[upper];
+    return { country: entry.name, countryFlag: entry.flag, countryCode: upper };
+  }
+
+  // 2. Check if raw string matches any country full name
+  if (raw) {
+    for (const [code, entry] of Object.entries(ISO_COUNTRY_MAP)) {
+      if (entry.name.toLowerCase() === raw.toLowerCase()) {
+        return { country: entry.name, countryFlag: entry.flag, countryCode: code };
+      }
+    }
+  }
+
+  // 3. Fallback: check timezone
+  if (options?.timezone && typeof options.timezone === "string") {
+    const tzKey = options.timezone.trim();
+    if (tzKey.startsWith("Asia/Kolkata") || tzKey.startsWith("Asia/Calcutta")) {
+      return { country: "India", countryFlag: "🇮🇳", countryCode: "IN" };
+    }
+    const tzCode = TIMEZONE_COUNTRY_MAP[tzKey];
+    if (tzCode && ISO_COUNTRY_MAP[tzCode]) {
+      const entry = ISO_COUNTRY_MAP[tzCode];
+      return { country: entry.name, countryFlag: entry.flag, countryCode: tzCode };
+    }
+  }
+
+  // 4. Fallback: check locale (e.g. "en-IN", "hi-IN", "en-US")
+  if (options?.locale && typeof options.locale === "string") {
+    const match = options.locale.match(/[-_]([A-Za-z]{2})\b/);
+    if (match && match[1]) {
+      const locCode = match[1].toUpperCase();
+      if (ISO_COUNTRY_MAP[locCode]) {
+        const entry = ISO_COUNTRY_MAP[locCode];
+        return { country: entry.name, countryFlag: entry.flag, countryCode: locCode };
+      }
+    }
+  }
+
+  // 5. If raw was provided but not in map, return it cleanly
+  if (raw && raw !== "Unknown" && raw !== "United States") {
+    return { country: raw, countryFlag: "🌐", countryCode: upper.slice(0, 2) || "XX" };
+  }
+
+  return { country: "Unknown", countryFlag: "🌐", countryCode: "XX" };
+}
+
 export function getCountryFlagEmoji(countryName: string): string {
-  const flags: Record<string, string> = {
-    "United States": "🇺🇸",
-    "Canada": "🇨🇦",
-    "United Kingdom": "🇬🇧",
-    "Germany": "🇩🇪",
-    "France": "🇫🇷",
-    "India": "🇮🇳",
-    "Australia": "🇦🇺",
-    "Japan": "🇯🇵",
-    "Brazil": "🇧🇷",
-    "Netherlands": "🇳🇱",
-  };
-  return flags[countryName] || "🌐";
+  const resolved = resolveCountryAndFlag({ rawCountry: countryName });
+  return resolved.countryFlag;
 }
 
 export async function processIngestionEvent(
@@ -150,8 +311,13 @@ export async function processIngestionEvent(
   });
 
   const parsedUa = parseDeviceFromUserAgent(payload.userAgent || "");
-  const country = payload.country || "United States";
-  const countryFlag = getCountryFlagEmoji(country);
+  const resolvedCountry = resolveCountryAndFlag({
+    rawCountry: payload.country,
+    timezone: payload.timezone || (payload.metadata as any)?.timezone,
+    locale: payload.locale || (payload.metadata as any)?.locale || (payload.metadata as any)?.language,
+  });
+  const country = resolvedCountry.country;
+  const countryFlag = resolvedCountry.countryFlag;
   const utmSource = payload.utm?.source || (payload.referrer && !payload.referrer.includes(payload.shopDomain || "") ? "Referral" : "Direct");
   const cost = payload.totalCost ? Number(payload.totalCost) : 0;
 

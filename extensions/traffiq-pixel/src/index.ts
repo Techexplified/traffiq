@@ -60,6 +60,15 @@ register(({ analytics, browser, init, settings, customerPrivacy }) => {
         ? `${endpoint}&shop=${encodeURIComponent(shopDomain)}`
         : `${endpoint}?shop=${encodeURIComponent(shopDomain)}`;
 
+      let clientTz = "";
+      try {
+        clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+      } catch {}
+      let clientLang = "";
+      try {
+        clientLang = (init?.context?.navigator?.language as string) || "";
+      } catch {}
+
       const payload = {
         eventId: event.id || `evt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
         eventType,
@@ -72,8 +81,12 @@ register(({ analytics, browser, init, settings, customerPrivacy }) => {
         variantId: extraData.variantId || undefined,
         totalCost: extraData.totalCost || undefined,
         utm,
+        timezone: clientTz,
+        locale: clientLang,
         metadata: {
           ...extraData,
+          timezone: clientTz,
+          language: clientLang,
           customerPrivacy: {
             analyticsAllowed,
           },

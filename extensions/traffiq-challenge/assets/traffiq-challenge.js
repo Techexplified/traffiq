@@ -239,6 +239,10 @@
         };
       } catch (e) {}
 
+      var clientTz = "";
+      try { clientTz = Intl.DateTimeFormat().resolvedOptions().timeZone || ""; } catch (e) {}
+      var clientLang = navigator.language || (navigator.languages && navigator.languages[0]) || "";
+
       var payload = {
         eventId: "tq_sf_" + now + "_" + Math.random().toString(36).slice(2, 8),
         eventType: eventType,
@@ -253,10 +257,14 @@
         variantId: extra.variantId || undefined,
         quantity: extra.quantity || 1,
         totalCost: extra.totalCost || undefined,
+        timezone: clientTz,
+        locale: clientLang,
         metadata: {
           ...extra,
           source: "traffiq_theme_embed",
           userAgent: navigator.userAgent || "",
+          timezone: clientTz,
+          language: clientLang,
         },
       };
 

@@ -223,7 +223,26 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     // 7. Sanitize Payload (Never trust client riskScore or client shopId)
     const userAgent = request.headers.get("user-agent") || (typeof rawBody.userAgent === "string" ? rawBody.userAgent : "");
-    const country = request.headers.get("cf-ipcountry") || (typeof rawBody.country === "string" ? rawBody.country : "United States");
+    const headerCountry =
+      request.headers.get("x-vercel-ip-country") ||
+      request.headers.get("cf-ipcountry") ||
+      request.headers.get("x-country-code") ||
+      request.headers.get("cloudfront-viewer-country") ||
+      request.headers.get("x-geo-country");
+    const headerRegion = request.headers.get("x-vercel-ip-country-region") || undefined;
+    const headerCity = request.headers.get("x-vercel-ip-city") || undefined;
+    const headerTimezone = request.headers.get("x-vercel-ip-timezone") || undefined;
+
+    const rawCountry = typeof rawBody.country === "string" ? rawBody.country : headerCountry || undefined;
+    const rawTimezone =
+      (typeof rawBody.timezone === "string" ? rawBody.timezone : undefined) ||
+      (typeof (rawBody.metadata as any)?.timezone === "string" ? (rawBody.metadata as any).timezone : undefined) ||
+      headerTimezone;
+    const rawLocale =
+      (typeof (rawBody.metadata as any)?.locale === "string" ? (rawBody.metadata as any).locale : undefined) ||
+      (typeof (rawBody.metadata as any)?.language === "string" ? (rawBody.metadata as any).language : undefined) ||
+      request.headers.get("accept-language") ||
+      undefined;
 
     const payload: IngestionEventPayload = {
       eventId,
@@ -241,7 +260,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       shopDomain: shop.shopDomain,
       userAgent,
       clientIp: isAnonymized ? clientIp.replace(/\.\d+$/, ".0") : clientIp,
-      country,
+      country: rawCountry,
+      city: typeof rawBody.city === "string" ? rawBody.city : headerCity,
+      region: typeof rawBody.region === "string" ? rawBody.region : headerRegion,
+      timezone: rawTimezone,
+      locale: rawLocale,
     };
 
     // 8. Process Ingestion & Persist into TrafficEvent and TrafficSession
