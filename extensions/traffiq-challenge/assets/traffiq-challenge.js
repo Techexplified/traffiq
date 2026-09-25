@@ -182,11 +182,12 @@
       (cid ? "&clientId=" + encodeURIComponent(cid) : "") +
       (sid ? "&sessionKey=" + encodeURIComponent(sid) : "") +
       (candidates.length ? "&candidates=" + encodeURIComponent(candidates.join(",")) : "") +
-      (isTest ? "&test_challenge=1" : "");
+      (isTest ? "&test_challenge=1" : "") +
+      "&_t=" + Date.now();
 
     currentStatusPromise = fetch(q, {
-      mode: "cors",
-      headers: { "Cache-Control": "no-cache" }
+      method: "GET",
+      mode: "cors"
     })
       .then(function (r) {
         if (!r.ok) throw new Error("HTTP " + r.status);
