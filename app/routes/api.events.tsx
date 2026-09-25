@@ -149,6 +149,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!shop) {
       shop = await prisma.shop.findFirst({
         where: { status: "ACTIVE" },
+        include: { settings: true },
         orderBy: { updatedAt: "desc" },
       });
     }

@@ -626,9 +626,11 @@ export class AnalyticsService {
       },
       _avg: { riskScore: true },
     });
-    const avgSuspRisk = Math.round(suspRiskResult._avg.riskScore ?? 75);
+    const avgSuspRisk = suspiciousSessionsCount > 0 ? Math.round(suspRiskResult._avg.riskScore ?? 0) : 0;
     const botLikelihood =
-      avgSuspRisk >= 80
+      suspiciousSessionsCount === 0 || avgSuspRisk === 0
+        ? "Low (<5%)"
+        : avgSuspRisk >= 80
         ? `High (${avgSuspRisk}%+)`
         : avgSuspRisk >= 50
         ? `Moderate (${avgSuspRisk}%+)`
@@ -997,7 +999,9 @@ export class AnalyticsService {
       trend: dailyTrend,
       anomaly: {
         title:
-          suspiciousPercent >= 25
+          suspiciousSessionsCount === 0
+            ? "No anomalies detected"
+            : suspiciousPercent >= 25
             ? "Suspicious traffic spike detected"
             : "Elevated monitoring active",
         affectedSessions: suspiciousSessionsCount,
@@ -1277,7 +1281,22 @@ export class AnalyticsService {
    * including reasons, detection signals, timeline, and actions.
    */
   static formatScoredSession(s: any, timeZone?: string): ScoredSession {
-    const riskLevel = getRiskLevel(s.riskScore ?? 0);
+    const hasManualBlock = Boolean(
+      (s.protectionActions || []).some(
+        (pa: any) => pa.action === "BLOCK" && pa.status === "EXECUTED"
+      )
+    );
+
+    // If session was manually blocked and previously stamped with 99, restore its true evaluated risk score if detectionResult is present
+    const trueRiskScore = (hasManualBlock && s.riskScore === 99 && s.detectionResult?.riskScore !== undefined && s.detectionResult.riskScore < 99)
+      ? s.detectionResult.riskScore
+      : (s.riskScore ?? 0);
+
+    const trueTrafficType = (hasManualBlock && s.trafficType === "BOT" && s.detectionResult?.trafficType && s.detectionResult.trafficType !== "BOT")
+      ? s.detectionResult.trafficType
+      : (s.trafficType || "HUMAN");
+
+    const riskLevel = getRiskLevel(trueRiskScore);
 
     let reasons: Array<{ title: string; desc: string; severity: "High" | "Medium" | "Low" }> = [];
     try {
@@ -1471,21 +1490,15 @@ export class AnalyticsService {
       computedRecommendation = fallbackRec.aiRecommendation;
     }
 
-    const hasManualBlock = Boolean(
-      (s.protectionActions || []).some(
-        (pa: any) => pa.action === "BLOCK" && pa.status === "EXECUTED"
-      )
-    );
-
     return {
       id: s.id,
       displayId: `#${s.id.slice(-5)}`,
       shop: s.shopId,
       riskLevel,
-      botScore: s.riskScore,
-      riskScore: s.riskScore,
-      trafficClassification: s.trafficType,
-      confidence: s.detectionResult?.confidence || (s.riskScore > 80 ? 94 : s.riskScore >= 50 ? 82 : 90),
+      botScore: trueRiskScore,
+      riskScore: trueRiskScore,
+      trafficClassification: trueTrafficType,
+      confidence: s.detectionResult?.confidence || (trueRiskScore > 80 ? 94 : trueRiskScore >= 50 ? 82 : 90),
       source: s.utmSource || s.referrer || "Direct",
       campaign: s.utmCampaign || "None",
       time: `${dateStr}, ${timeStr}`,
@@ -1503,19 +1516,19 @@ export class AnalyticsService {
       detectionSignals,
       sessionTimeline,
       aiExplanation: s.detectionResult?.aiExplanation || undefined,
-      recommendedAction: s.aiRecommendation || s.detectionResult?.recommendedAction || (s.riskScore > 80 ? "BLOCK" : s.riskScore >= 50 ? "FLAG" : "MONITOR"),
-      isFlagged: Boolean(hasManualBlock || (s.isFlagged ?? (s.riskScore >= 50))),
-      flaggedReason: s.flaggedReason || (hasManualBlock ? "Manually blocked by merchant" : s.riskScore >= 50 ? (reasons[0]?.title ?? "Suspicious activity detected") : undefined),
+      recommendedAction: s.aiRecommendation || s.detectionResult?.recommendedAction || (trueRiskScore > 80 ? "BLOCK" : trueRiskScore >= 50 ? "FLAG" : "MONITOR"),
+      isFlagged: Boolean(hasManualBlock || (s.isFlagged ?? (trueRiskScore >= 50))),
+      flaggedReason: s.flaggedReason || (hasManualBlock ? "Manually blocked by merchant" : trueRiskScore >= 50 ? (reasons[0]?.title ?? "Suspicious activity detected") : undefined),
       aiRecommendation: computedRecommendation,
-      trafficType: s.trafficType,
-      severity: s.severity || (s.riskScore > 80 ? "HIGH" : s.riskScore >= 50 ? "MEDIUM" : "LOW"),
+      trafficType: trueTrafficType,
+      severity: s.severity || (trueRiskScore > 80 ? "HIGH" : trueRiskScore >= 50 ? "MEDIUM" : "LOW"),
       startedAt: startedDate.toISOString(),
       lastSeenAt: lastSeenDate.toISOString(),
       pageViews: s.pageViews,
       addToCartCount: s.addToCartCount,
       checkoutStarted: s.checkoutStarted,
       landingPage: s.landingPage,
-      isBlocked: Boolean(hasManualBlock || (s.riskScore > 80 && s.trafficType === "BOT")),
+      isBlocked: Boolean(hasManualBlock || (trueRiskScore > 80 && trueTrafficType === "BOT")),
       isManuallyBlocked: hasManualBlock,
     };
   }

@@ -253,11 +253,13 @@ export default function TrafficTruthDashboard() {
             </span>
           </div>
           <div className="tq-stat-value-row">
-            <span className="tq-stat-number" style={{ color: "#ef4444" }}>{metrics.suspiciousPercent}%</span>
+            <span className="tq-stat-number" style={{ color: currentSuspiciousSessions > 0 ? "#ef4444" : "var(--tq-text-main)" }}>{metrics.suspiciousPercent}%</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span className="tq-stat-subtext">{currentSuspiciousSessions.toLocaleString()} sessions</span>
-            <span className="tq-stat-trend tq-trend-up-red">↑ {metrics.suspiciousTrend}%</span>
+            <span className={`tq-stat-trend ${metrics.suspiciousTrend > 0 ? "tq-trend-up-red" : "tq-trend-neutral"}`}>
+              {metrics.suspiciousTrend > 0 ? `↑ ${metrics.suspiciousTrend}%` : "0%"}
+            </span>
           </div>
         </div>
 
@@ -276,8 +278,8 @@ export default function TrafficTruthDashboard() {
           <div className="tq-stat-value-row">
             <span className="tq-stat-number">{currentTotalSessions.toLocaleString()}</span>
           </div>
-          <div className="tq-stat-trend tq-trend-up-green">
-            <span>↑ {metrics.totalSessionsTrend}%</span>
+          <div className={`tq-stat-trend ${metrics.totalSessionsTrend > 0 ? "tq-trend-up-green" : "tq-trend-neutral"}`}>
+            <span>{metrics.totalSessionsTrend > 0 ? `↑ ${metrics.totalSessionsTrend}%` : "0%"}</span>
             <span style={{ color: "var(--tq-text-muted)", fontWeight: 500 }}>vs {compareRange}</span>
           </div>
         </div>
@@ -708,7 +710,7 @@ export default function TrafficTruthDashboard() {
                     </svg>
                     <span>Bot likelihood</span>
                   </div>
-                  <span className="tq-alert-row-val">{metrics.trafficQualityScore < 60 ? "High (85%+)" : "Moderate (65%+)"}</span>
+                  <span className="tq-alert-row-val">{currentSuspiciousSessions === 0 ? "Low (<5%)" : metrics.trafficQualityScore < 60 ? "High (85%+)" : "Moderate (65%+)"}</span>
                 </div>
 
                 <div className="tq-alert-row-item">

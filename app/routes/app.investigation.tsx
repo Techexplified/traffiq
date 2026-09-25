@@ -30,6 +30,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     if (!foundShop) {
       foundShop = await prisma.shop.findFirst({
         where: { status: "ACTIVE" },
+        include: { settings: true },
         orderBy: { updatedAt: "desc" },
       });
     }
@@ -80,6 +81,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     if (!foundShop) {
       foundShop = await prisma.shop.findFirst({
         where: { status: "ACTIVE" },
+        include: { settings: true },
         orderBy: { updatedAt: "desc" },
       });
     }
@@ -137,9 +139,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         isFlagged: true,
         flaggedReason: "Manually blocked by merchant",
         aiRecommendation: "Session manually blocked by merchant. Block active on storefront and checkout.",
-        riskScore: 99,
-        severity: "CRITICAL",
-        trafficType: "BOT",
       },
     });
 
@@ -188,9 +187,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         isFlagged: false,
         flaggedReason: null,
         aiRecommendation: null,
-        riskScore: 15,
-        severity: "LOW",
-        trafficType: "HUMAN",
       },
     });
 
@@ -329,7 +325,7 @@ export default function TrafficInvestigation() {
   const currentProtectionMode = (loadedProtectionMode || metrics?.protection?.mode || "CHALLENGE").toUpperCase() === "BLOCK" ? "BLOCK" : "CHALLENGE";
 
   const [sessions, setSessions] = useState<ScoredSession[]>(initialSessions);
-  const [selectedSession, setSelectedSession] = useState<ScoredSession | null>(initialDetail);
+  const [selectedSession, setSelectedSession] = useState<ScoredSession | null>(null);
   const [totalCount, setTotalCount] = useState<number>(initialTotalCount);
   const [totalPages, setTotalPages] = useState<number>(initialTotalPages);
 
@@ -347,7 +343,7 @@ export default function TrafficInvestigation() {
   const [activePage, setActivePage] = useState(1);
 
   // UI state
-  const [drawerOpen, setDrawerOpen] = useState(true);
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [isLoadingList, setIsLoadingList] = useState(false);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -434,10 +430,10 @@ export default function TrafficInvestigation() {
 
   // Dynamic KPI calculations
   const likelyAutomatedSessions = sessions.filter((s) => s.riskLevel === "Likely Automated");
-  const automatedRatio = sessions.length > 0 ? Math.round((likelyAutomatedSessions.length / sessions.length) * 100) : 54;
+  const automatedRatio = sessions.length > 0 ? Math.round((likelyAutomatedSessions.length / sessions.length) * 100) : 0;
   const avgBotScore = sessions.length > 0
     ? Math.round(sessions.reduce((sum, s) => sum + (s.botScore ?? 0), 0) / sessions.length)
-    : 56;
+    : 0;
 
   // Track initial render to skip duplicate fetch
   // Track initial render to skip duplicate fetch
@@ -618,13 +614,15 @@ export default function TrafficInvestigation() {
             <span className="tq-info-icon" title="Flagged visits requiring review.">ⓘ</span>
           </div>
           <div className="tq-stat-value-row">
-            <span className="tq-stat-number" style={{ color: "var(--tq-danger)" }}>
+            <span className="tq-stat-number" style={{ color: metrics.suspiciousSessions > 0 ? "var(--tq-danger)" : "var(--tq-text-main)" }}>
               {metrics.suspiciousSessions.toLocaleString()}
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span className="tq-stat-subtext">{metrics.suspiciousPercent}% of total sessions</span>
-            <span className="tq-stat-trend tq-trend-up-red">↑ {metrics.suspiciousTrend}%</span>
+            <span className={`tq-stat-trend ${metrics.suspiciousTrend > 0 ? "tq-trend-up-red" : "tq-trend-neutral"}`}>
+              {metrics.suspiciousTrend > 0 ? `↑ ${metrics.suspiciousTrend}%` : "0%"}
+            </span>
           </div>
         </div>
 
@@ -641,7 +639,9 @@ export default function TrafficInvestigation() {
           </div>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <span className="tq-stat-subtext">{automatedRatio}% of suspicious</span>
-            <span className="tq-stat-trend tq-trend-up-red">↑ 18%</span>
+            <span className={`tq-stat-trend ${metrics.suspiciousSessions > 0 && automatedRatio > 0 ? "tq-trend-up-red" : "tq-trend-neutral"}`}>
+              {metrics.suspiciousSessions > 0 && automatedRatio > 0 ? `↑ ${automatedRatio}%` : "0%"}
+            </span>
           </div>
         </div>
 
@@ -667,8 +667,9 @@ export default function TrafficInvestigation() {
       <div
         className="tq-split-container"
         style={{
-          gridTemplateColumns: drawerOpen ? "minmax(0, 1fr) 380px" : "1fr",
-          transition: "all 0.2s ease",
+          gridTemplateColumns: drawerOpen && selectedSession ? "minmax(0, 1fr) 400px" : "1fr",
+          transition: "all 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+          width: "100%",
         }}
       >
         {/* Left: Sessions Table Card */}
@@ -839,11 +840,11 @@ export default function TrafficInvestigation() {
                   sessions.map((session) => {
                     const isSelected = selectedSession?.id === session.id;
                     const isManuallyBlocked = Boolean(session.isManuallyBlocked);
-                    const sessionIsHuman = !isManuallyBlocked && (session.riskLevel === "Likely Human" || (session.botScore ?? 0) < 50);
-                    const sessionIsHigh = isManuallyBlocked || (session.botScore ?? 0) > 80 || session.riskLevel === "Likely Automated";
+                    const sessionIsHuman = session.riskLevel === "Likely Human" || (session.botScore ?? 0) < 50;
+                    const sessionIsHigh = (session.botScore ?? 0) > 80 || session.riskLevel === "Likely Automated";
                     const isSuspicious = !sessionIsHuman && !sessionIsHigh;
-                    const dotColor = isManuallyBlocked ? "#dc2626" : sessionIsHuman ? "#10b981" : sessionIsHigh ? "var(--tq-danger)" : "var(--tq-warning)";
-                    const barColor = isManuallyBlocked ? "#dc2626" : sessionIsHuman ? "#10b981" : sessionIsHigh ? "var(--tq-danger)" : "var(--tq-warning)";
+                    const dotColor = sessionIsHuman ? "#10b981" : sessionIsHigh ? "var(--tq-danger)" : "var(--tq-warning)";
+                    const barColor = sessionIsHuman ? "#10b981" : sessionIsHigh ? "var(--tq-danger)" : "var(--tq-warning)";
                     const typeLabel = isManuallyBlocked ? "Blocked (Manual)" : session.riskLevel || (sessionIsHuman ? "Likely Human" : sessionIsHigh ? "Likely Automated" : "Suspicious");
                     const isFlagged = session.isFlagged ?? (isSuspicious || sessionIsHigh || isManuallyBlocked);
                     let statusLabel = "✓ Monitored";
@@ -965,7 +966,7 @@ export default function TrafficInvestigation() {
 
         {/* Right: Interactive Session Detail Inspector Drawer */}
         {drawerOpen && selectedSession && (
-          <div className="tq-card" style={{ padding: "1.25rem", position: "sticky", top: "5rem", minWidth: 0 }}>
+          <div className="tq-card tq-inspector-drawer" style={{ padding: "1.25rem", position: "sticky", top: "5rem", minWidth: 0 }}>
             {/* Drawer Header: Title, Badge, and Close Button */}
             <div style={{
               display: "flex",
@@ -1016,7 +1017,10 @@ export default function TrafficInvestigation() {
                 </span>
               </div>
               <button
-                onClick={() => setDrawerOpen(false)}
+                onClick={() => {
+                  setDrawerOpen(false);
+                  setSelectedSession(null);
+                }}
                 style={{
                   background: "none",
                   border: "none",

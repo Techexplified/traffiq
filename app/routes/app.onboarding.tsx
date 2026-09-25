@@ -113,7 +113,6 @@ export default function Onboarding() {
     isAlreadyConnected ? "Store connection verified and active." : ""
   );
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
-  const [scanPhase, setScanPhase] = useState("Connecting to Shopify Storefront API...");
   const [checkoutValidation, setCheckoutValidation] = useState(settings.checkoutValidation);
   const [telemetryAccess, setTelemetryAccess] = useState(settings.telemetryAccess);
   const [threatDefense, setThreatDefense] = useState(settings.threatDefense);
@@ -175,7 +174,6 @@ export default function Onboarding() {
     let timer: NodeJS.Timeout;
     if (currentStep === 3) {
       setAnalyzingProgress(0);
-      setScanPhase(`Connecting to ${inputStore} Storefront Telemetry API...`);
 
       const startTime = Date.now();
       const totalDuration = 3200; // 3.2 seconds total scan time
@@ -185,18 +183,7 @@ export default function Onboarding() {
         const progress = Math.min(Math.round((elapsed / totalDuration) * 100), 100);
         setAnalyzingProgress(progress);
 
-        if (progress < 22) {
-          setScanPhase(`Connecting to ${inputStore} Storefront Telemetry API...`);
-        } else if (progress < 45) {
-          setScanPhase(`Inspecting ${shop.name} checkout validation logs & cart events...`);
-        } else if (progress < 68) {
-          setScanPhase(`Auditing visitor sessions across ${inputStore}...`);
-        } else if (progress < 88) {
-          setScanPhase("Cross-referencing proxy & heuristic bot signatures...");
-        } else if (progress < 100) {
-          setScanPhase(`Finalizing Traffic Quality baseline for ${shop.name}...`);
-        } else {
-          setScanPhase("Analysis Complete! Calibrating baseline...");
+        if (progress >= 100) {
           clearInterval(timer);
           setTimeout(() => {
             setCurrentStep(4);
@@ -205,7 +192,7 @@ export default function Onboarding() {
       }, 100);
     }
     return () => clearInterval(timer);
-  }, [currentStep, inputStore, shop.name]);
+  }, [currentStep]);
 
   return (
     <div className="tq-page tq-onboarding-page">
@@ -727,16 +714,13 @@ export default function Onboarding() {
             </div>
           </div>
 
-          <h2 style={{ fontSize: "1.35rem", fontWeight: 700, margin: "0 0 0.25rem 0", color: "var(--tq-text-main)" }}>
+          <h2 style={{ fontSize: "1.35rem", fontWeight: 700, margin: "0 0 1.5rem 0", color: "var(--tq-text-main)" }}>
             Analyzing {shop.name} Traffic...
           </h2>
-          <p style={{ fontSize: "0.85rem", color: "var(--tq-text-muted)", marginBottom: "1.25rem" }}>
-            Traffiq AI is inspecting session history, checkout events, and heuristic bot signatures on <strong>{inputStore}</strong>.
-          </p>
 
           {/* Progress Bar */}
-          <div style={{ maxWidth: "400px", margin: "0 auto 0.85rem auto" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.825rem", fontWeight: 700, marginBottom: "0.4rem" }}>
+          <div style={{ maxWidth: "400px", margin: "0 auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.825rem", fontWeight: 700, marginBottom: "0.5rem" }}>
               <span style={{ color: "#334155" }}>Telemetry Inspection</span>
               <span style={{ color: "var(--tq-primary)", fontVariantNumeric: "tabular-nums" }}>{analyzingProgress}%</span>
             </div>
@@ -749,24 +733,6 @@ export default function Onboarding() {
                 transition: "width 0.2s ease",
               }} />
             </div>
-          </div>
-
-          {/* Dynamic rotating scan status line */}
-          <div style={{
-            fontSize: "0.8rem",
-            fontWeight: 600,
-            color: "#2563eb",
-            background: "#eff6ff",
-            border: "1px solid #dbeafe",
-            borderRadius: "8px",
-            padding: "0.5rem 0.85rem",
-            display: "inline-flex",
-            alignItems: "center",
-            gap: "0.5rem",
-            maxWidth: "420px",
-          }}>
-            <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", background: "#2563eb", animation: "ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite" }} />
-            <span>{scanPhase}</span>
           </div>
         </div>
       )}
@@ -1051,8 +1017,8 @@ export default function Onboarding() {
           <h2 style={{ fontSize: "1.4rem", fontWeight: 800, margin: "0 0 0.35rem 0", color: "var(--tq-text-main)", letterSpacing: "-0.02em" }}>
             Protection Engine Activated!
           </h2>
-          <p style={{ fontSize: "0.85rem", color: "var(--tq-text-muted)", maxWidth: "440px", margin: "0 auto 1.25rem auto", lineHeight: 1.45 }}>
-            Traffiq is now actively filtering invalid traffic, protecting your checkout flow, and surfacing real shopper analytics on <strong>{shop.name}</strong> ({inputStore}).
+          <p style={{ fontSize: "0.85rem", color: "var(--tq-text-muted)", maxWidth: "420px", margin: "0 auto 1.15rem auto", lineHeight: 1.45 }}>
+            Storefront defenses and real-time monitoring are now active for <strong>{shop.name}</strong>.
           </p>
 
           <div style={{
@@ -1060,28 +1026,28 @@ export default function Onboarding() {
             border: "1px solid #e2e8f0",
             borderRadius: "10px",
             padding: "0.85rem 1.1rem",
-            maxWidth: "400px",
+            maxWidth: "390px",
             margin: "0 auto 1.25rem auto",
             textAlign: "left",
             display: "flex",
             flexDirection: "column",
-            gap: "0.5rem",
+            gap: "0.45rem",
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.825rem", color: "#334155", fontWeight: 600 }}>
               <span style={{ color: "#10b981" }}>✓</span>
-              <span>Real-time traffic quality monitoring active on {inputStore}</span>
+              <span>Real-time traffic monitoring active</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.825rem", color: "#334155", fontWeight: 600 }}>
               <span style={{ color: "#10b981" }}>✓</span>
-              <span>Checkout validation &amp; bot protection armed</span>
+              <span>Checkout bot protection armed</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.825rem", color: "#334155", fontWeight: 600 }}>
               <span style={{ color: "#10b981" }}>✓</span>
-              <span>Storefront CAPTCHA Challenge App Embed enabled</span>
+              <span>Storefront bot challenge enabled</span>
             </div>
             <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", fontSize: "0.825rem", color: "#334155", fontWeight: 600 }}>
               <span style={{ color: "#10b981" }}>✓</span>
-              <span>AI Traffic Insights &amp; Anomaly Alerts ready</span>
+              <span>AI traffic insights &amp; alerts ready</span>
             </div>
           </div>
 
@@ -1096,7 +1062,7 @@ export default function Onboarding() {
               boxShadow: "0 4px 14px rgba(37, 99, 235, 0.3)",
             }}
           >
-            Open Traffic Truth Dashboard →
+            Open Traffiq Dashboard →
           </button>
 
           <div style={{ marginTop: "0.85rem", fontSize: "0.775rem", color: "#64748b" }}>

@@ -75,9 +75,6 @@ export class TrafficDetectionEngine {
           await prisma.trafficSession.update({
             where: { id: session.id },
             data: {
-              riskScore: 99,
-              trafficType: "BOT",
-              severity: "CRITICAL",
               isFlagged: true,
               flaggedReason: "Manually blocked by merchant",
               aiRecommendation: "Session manually blocked by merchant. Block active on storefront and checkout.",
@@ -87,9 +84,9 @@ export class TrafficDetectionEngine {
       }
 
       return {
-        riskScore: 99,
-        trafficType: "BOT",
-        severity: "CRITICAL",
+        riskScore: session.riskScore,
+        trafficType: (session.trafficType as TrafficType) || "BOT",
+        severity: (session.severity as SeverityLevel) || "HIGH",
         confidence: 99,
         reasons: ["Session manually blocked by merchant via Traffic Investigation"],
         signals: [],

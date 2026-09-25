@@ -165,9 +165,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     if (isManuallyBlocked) {
       isHighSeveritySession = true;
       severityReason = manualBlockReason;
-      sessionRiskScore = 99;
-      sessionTrafficType = "BOT";
-      sessionSeverity = "HIGH";
+      if (sessionKey) {
+        const trafficSession = await prisma.trafficSession.findFirst({
+          where: {
+            shopId: shop.id,
+            OR: [{ sessionKey }, { id: sessionKey }],
+          },
+          select: { riskScore: true, trafficType: true, severity: true },
+        });
+        if (trafficSession) {
+          sessionRiskScore = trafficSession.riskScore;
+          sessionTrafficType = trafficSession.trafficType;
+          sessionSeverity = trafficSession.severity;
+        }
+      }
     } else {
       // 2. Manual test override (?test_challenge=1 or ?simulate_high_severity=1)
       const isTestOverride =

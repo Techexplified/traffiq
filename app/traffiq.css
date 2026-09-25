@@ -1047,6 +1047,21 @@ body {
 }
 
 /* Split View Tables & Inspectors */
+@keyframes tqSlideDrawerIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.tq-inspector-drawer {
+  animation: tqSlideDrawerIn 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
 .tq-split-container {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 380px;
