@@ -596,60 +596,20 @@ export default function Onboarding() {
                 <div style={{ flex: 1, textAlign: "left" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
                     <span style={{ fontWeight: 650, fontSize: "0.85rem", color: "#0f172a" }}>
-                      Storefront Web Traffic Telemetry
+                      Storefront Web Telemetry
                     </span>
                     <span className="tq-perm-scope-badge green">
                       Web Pixels
                     </span>
                   </div>
                   <div style={{ fontSize: "0.75rem", color: "var(--tq-text-muted)", marginTop: "0.15rem", lineHeight: 1.35 }}>
-                    Monitors shopper visits and detects scrapers in a zero-latency sandbox.
+                    Live visitor tracking and scraper detection with zero site latency.
                   </div>
                 </div>
               </div>
               <input
                 type="checkbox"
                 checked={telemetryAccess}
-                onChange={() => {}}
-                style={{ width: "18px", height: "18px", accentColor: "#2563eb", cursor: "pointer", marginLeft: "0.5rem", flexShrink: 0 }}
-              />
-            </div>
-
-            {/* Permission 2: Storefront Bot Challenge & Interception */}
-            <div
-              className="tq-perm-toggle-item"
-              role="button"
-              tabIndex={0}
-              onClick={() => setThreatDefense(!threatDefense)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  setThreatDefense(!threatDefense);
-                }
-              }}
-            >
-              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flex: 1 }}>
-                <div style={{ width: "34px", height: "34px", borderRadius: "8px", background: "#fffbeb", color: "#d97706", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-                  </svg>
-                </div>
-                <div style={{ flex: 1, textAlign: "left" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
-                    <span style={{ fontWeight: 650, fontSize: "0.85rem", color: "#0f172a" }}>
-                      Storefront Bot Challenge
-                    </span>
-                    <span className="tq-perm-scope-badge amber">
-                      Theme Embed
-                    </span>
-                  </div>
-                  <div style={{ fontSize: "0.75rem", color: "var(--tq-text-muted)", marginTop: "0.15rem", lineHeight: 1.35 }}>
-                    Challenges rapid bot clicks &amp; prevents cart hoarding (1-click Theme Editor activation in Step 4).
-                  </div>
-                </div>
-              </div>
-              <input
-                type="checkbox"
-                checked={threatDefense}
                 onChange={() => {}}
                 style={{ width: "18px", height: "18px", accentColor: "#2563eb", cursor: "pointer", marginLeft: "0.5rem", flexShrink: 0 }}
               />
@@ -720,14 +680,14 @@ export default function Onboarding() {
                 <div style={{ flex: 1, textAlign: "left" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.45rem", flexWrap: "wrap" }}>
                     <span style={{ fontWeight: 650, fontSize: "0.85rem", color: "#0f172a" }}>
-                      Campaign &amp; Catalog Context
+                      Ad &amp; Campaign Protection
                     </span>
                     <span className="tq-perm-scope-badge purple">
                       Metaobjects
                     </span>
                   </div>
                   <div style={{ fontSize: "0.75rem", color: "var(--tq-text-muted)", marginTop: "0.15rem", lineHeight: 1.35 }}>
-                    Filters fake bot clicks from paid ad campaigns to protect your marketing spend.
+                    Filters invalid bot clicks from paid ads to protect your ad budget.
                   </div>
                 </div>
               </div>
@@ -746,7 +706,7 @@ export default function Onboarding() {
             className="tq-btn tq-btn-primary"
             style={{ padding: "0.65rem 1.8rem", fontSize: "0.9rem" }}
           >
-            Grant Access &amp; Begin Scanning {shop.name} →
+            Grant Access &amp; Begin Scanning →
           </button>
         </div>
       )}
