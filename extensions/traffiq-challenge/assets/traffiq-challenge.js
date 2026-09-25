@@ -407,37 +407,40 @@
       return false;
     }
 
-    // Verify protection status before allowing action if last safe check was > 4 seconds ago
-    var now = Date.now();
-    if (now - lastSafeCheckTime > 4000) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      pending = { type: "click", el: btn };
+    // Verify protection status before allowing action
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    pending = { type: "click", el: btn };
 
-      initProtection(appUrl).then(function (d) {
-        if (d && (d.blockRequired || d.isManuallyBlocked)) {
-          pending = null;
+    initProtection(appUrl).then(function (d) {
+      if (d && (d.blockRequired || d.isManuallyBlocked)) {
+        pending = null;
+        activeProtectionMode = "BLOCK";
+        isArmed = true;
+        try {
+          sessionStorage.setItem(BLOCKED_KEY, "true");
+          localStorage.setItem(BLOCKED_KEY, "true");
+          sessionStorage.removeItem(KEY);
+        } catch (e) {}
+        showModal();
+      } else if (d && d.challengeRequired) {
+        var verified = false;
+        try { verified = sessionStorage.getItem(KEY) === "true"; } catch (err) {}
+        if (!verified) {
           showModal();
-        } else if (d && d.challengeRequired) {
-          var verified = false;
-          try { verified = sessionStorage.getItem(KEY) === "true"; } catch (err) {}
-          if (!verified) {
-            showModal();
-          } else {
-            lastSafeCheckTime = Date.now();
-            resume();
-          }
         } else {
           lastSafeCheckTime = Date.now();
           resume();
         }
-      }).catch(function () {
+      } else {
         lastSafeCheckTime = Date.now();
         resume();
-      });
-      return false;
-    }
+      }
+    }).catch(function () {
+      resume();
+    });
+    return false;
 
     if (activeProtectionMode === "CHALLENGE" && isArmed) {
       var verified = false;
@@ -485,36 +488,39 @@
       return false;
     }
 
-    var now = Date.now();
-    if (now - lastSafeCheckTime > 4000) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      pending = { type: "submit", form: form };
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    pending = { type: "submit", form: form };
 
-      initProtection(appUrl).then(function (d) {
-        if (d && (d.blockRequired || d.isManuallyBlocked)) {
-          pending = null;
+    initProtection(appUrl).then(function (d) {
+      if (d && (d.blockRequired || d.isManuallyBlocked)) {
+        pending = null;
+        activeProtectionMode = "BLOCK";
+        isArmed = true;
+        try {
+          sessionStorage.setItem(BLOCKED_KEY, "true");
+          localStorage.setItem(BLOCKED_KEY, "true");
+          sessionStorage.removeItem(KEY);
+        } catch (e) {}
+        showModal();
+      } else if (d && d.challengeRequired) {
+        var verified = false;
+        try { verified = sessionStorage.getItem(KEY) === "true"; } catch (err) {}
+        if (!verified) {
           showModal();
-        } else if (d && d.challengeRequired) {
-          var verified = false;
-          try { verified = sessionStorage.getItem(KEY) === "true"; } catch (err) {}
-          if (!verified) {
-            showModal();
-          } else {
-            lastSafeCheckTime = Date.now();
-            resume();
-          }
         } else {
           lastSafeCheckTime = Date.now();
           resume();
         }
-      }).catch(function () {
+      } else {
         lastSafeCheckTime = Date.now();
         resume();
-      });
-      return false;
-    }
+      }
+    }).catch(function () {
+      resume();
+    });
+    return false;
 
     if (activeProtectionMode === "CHALLENGE" && isArmed) {
       var verified = false;

@@ -118,7 +118,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           OR: candidateKeys.flatMap((k) => [
             { session: { sessionKey: k } },
             { session: { id: k } },
-            { session: { ipAddress: k } },
             { sessionId: k },
             { metadata: { contains: k } },
           ]),
@@ -133,7 +132,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           OR: candidateKeys.flatMap((k) => [
             { sessionKey: k },
             { id: k },
-            { ipAddress: k },
           ]),
           AND: [
             {
