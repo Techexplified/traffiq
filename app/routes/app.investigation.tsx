@@ -845,7 +845,9 @@ export default function TrafficInvestigation() {
                     const isSuspicious = !sessionIsHuman && !sessionIsHigh;
                     const dotColor = sessionIsHuman ? "#10b981" : sessionIsHigh ? "var(--tq-danger)" : "var(--tq-warning)";
                     const barColor = sessionIsHuman ? "#10b981" : sessionIsHigh ? "var(--tq-danger)" : "var(--tq-warning)";
-                    const typeLabel = isManuallyBlocked ? "Blocked (Manual)" : session.riskLevel || (sessionIsHuman ? "Likely Human" : sessionIsHigh ? "Likely Automated" : "Suspicious");
+                    const typeLabel = session.trafficClassification
+                      ? (session.trafficClassification === "BOT" ? "Likely Automated" : session.trafficClassification === "HUMAN" ? "Likely Human" : session.trafficClassification)
+                      : (session.riskLevel || (sessionIsHuman ? "Likely Human" : sessionIsHigh ? "Likely Automated" : "Suspicious"));
                     const isFlagged = session.isFlagged ?? (isSuspicious || sessionIsHigh || isManuallyBlocked);
                     let statusLabel = "✓ Monitored";
                     if (isManuallyBlocked) {
@@ -890,7 +892,7 @@ export default function TrafficInvestigation() {
                           </div>
                         </td>
                         <td>
-                          <span className={`tq-badge ${isManuallyBlocked ? "tq-badge-high" : sessionIsHuman ? "tq-badge-good" : sessionIsHigh ? "tq-badge-high" : "tq-badge-medium"}`}>
+                          <span className={`tq-badge ${sessionIsHuman ? "tq-badge-good" : sessionIsHigh ? "tq-badge-high" : "tq-badge-medium"}`}>
                             {typeLabel}
                           </span>
                         </td>

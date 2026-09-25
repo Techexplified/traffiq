@@ -25,7 +25,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       "127.0.0.1";
     const anonKey = `anon_${clientIp.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
-    const candidateKeys = [rawClientId, rawSessionKey, rawSessionId, anonKey]
+    const candidateKeys = [rawClientId, rawSessionKey, rawSessionId, clientIp, anonKey]
       .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
       .map((k) => k.replace(/^["']+|["']+$/g, "").trim());
 
@@ -112,11 +112,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     if (candidateKeys.length > 0) {
       const manualBlockAction = await prisma.protectionAction.findFirst({
         where: {
+          shopId: shop.id,
           action: "BLOCK",
-          status: "EXECUTED",
+          status: { in: ["EXECUTED", "ACTIVE"] },
           OR: candidateKeys.flatMap((k) => [
             { session: { sessionKey: k } },
             { session: { id: k } },
+            { session: { ipAddress: k } },
             { sessionId: k },
             { metadata: { contains: k } },
           ]),
@@ -126,18 +128,19 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
       const flaggedSession = await prisma.trafficSession.findFirst({
         where: {
+          shopId: shop.id,
           isFlagged: true,
           OR: candidateKeys.flatMap((k) => [
             { sessionKey: k },
             { id: k },
+            { ipAddress: k },
           ]),
           AND: [
             {
               OR: [
                 { flaggedReason: { contains: "blocked", mode: "insensitive" } },
                 { flaggedReason: { contains: "manual", mode: "insensitive" } },
-                { riskScore: { gte: 90 } },
-                { severity: "CRITICAL" },
+                { aiRecommendation: { contains: "manually blocked", mode: "insensitive" } },
               ],
             },
           ],

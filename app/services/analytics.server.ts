@@ -1216,8 +1216,8 @@ export class AnalyticsService {
             take: 20,
           },
           protectionActions: {
-            orderBy: { createdAt: "desc" },
-            take: 5,
+            where: { action: "BLOCK" },
+            take: 1,
           },
         },
         orderBy,
@@ -1282,17 +1282,19 @@ export class AnalyticsService {
    */
   static formatScoredSession(s: any, timeZone?: string): ScoredSession {
     const hasManualBlock = Boolean(
+      (s.flaggedReason && /manual|blocked/i.test(s.flaggedReason)) ||
+      (s.aiRecommendation && /manually blocked/i.test(s.aiRecommendation)) ||
       (s.protectionActions || []).some(
-        (pa: any) => pa.action === "BLOCK" && pa.status === "EXECUTED"
+        (pa: any) => pa.action === "BLOCK" && (pa.status === "EXECUTED" || pa.status === "ACTIVE")
       )
     );
 
-    // If session was manually blocked and previously stamped with 99, restore its true evaluated risk score if detectionResult is present
-    const trueRiskScore = (hasManualBlock && s.riskScore === 99 && s.detectionResult?.riskScore !== undefined && s.detectionResult.riskScore < 99)
+    // If detectionResult is present, that is the true evaluated score and classification
+    const trueRiskScore = (s.detectionResult?.riskScore !== undefined)
       ? s.detectionResult.riskScore
       : (s.riskScore ?? 0);
 
-    const trueTrafficType = (hasManualBlock && s.trafficType === "BOT" && s.detectionResult?.trafficType && s.detectionResult.trafficType !== "BOT")
+    const trueTrafficType = (s.detectionResult?.trafficType)
       ? s.detectionResult.trafficType
       : (s.trafficType || "HUMAN");
 

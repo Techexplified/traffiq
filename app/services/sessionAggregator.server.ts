@@ -363,9 +363,9 @@ export async function processIngestionEvent(
         checkoutStarted: payload.eventType === "checkout_started",
         purchaseCompleted: payload.eventType === "purchase",
         totalSpend: cost,
-        riskScore: wasManuallyBlocked ? 99 : 0,
-        trafficType: wasManuallyBlocked ? "BOT" : "HUMAN",
-        severity: wasManuallyBlocked ? "CRITICAL" : "LOW",
+        riskScore: 0,
+        trafficType: "HUMAN",
+        severity: "LOW",
         isFlagged: Boolean(wasManuallyBlocked),
         flaggedReason: wasManuallyBlocked ? "Manually blocked by merchant" : null,
         aiRecommendation: wasManuallyBlocked
