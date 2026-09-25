@@ -18,6 +18,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const rawClientId = url.searchParams.get("clientId");
     const rawSessionKey = url.searchParams.get("sessionKey");
     const rawSessionId = url.searchParams.get("sessionId");
+    const rawCandidates = url.searchParams.get("candidates") || "";
+    const rawMetaY = url.searchParams.get("metaY");
+    const rawMetaS = url.searchParams.get("metaS");
 
     const clientIp =
       request.headers.get("cf-connecting-ip") ||
@@ -25,10 +28,36 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       "127.0.0.1";
     const anonKey = `anon_${clientIp.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
-    const candidateKeys = [rawClientId, rawSessionKey, rawSessionId, clientIp, anonKey]
-      .filter((k): k is string => typeof k === "string" && k.trim().length > 0)
-      .map((k) => k.replace(/^["']+|["']+$/g, "").trim());
+    const rawList = [
+      rawClientId,
+      rawSessionKey,
+      rawSessionId,
+      rawMetaY,
+      rawMetaS,
+      ...rawCandidates.split(","),
+      clientIp,
+      anonKey,
+    ];
 
+    const keySet = new Set<string>();
+    for (const item of rawList) {
+      if (typeof item === "string" && item.trim().length > 0) {
+        const clean = item.replace(/^["']+|["']+$/g, "").trim();
+        if (clean) {
+          keySet.add(clean);
+          // If UUID with hyphens, also add version without hyphens
+          if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clean)) {
+            keySet.add(clean.replace(/-/g, ""));
+          } else if (/^[0-9a-f]{32}$/i.test(clean)) {
+            // If 32-hex string without hyphens, also add hyphenated UUID version
+            const formatted = `${clean.slice(0, 8)}-${clean.slice(8, 12)}-${clean.slice(12, 16)}-${clean.slice(16, 20)}-${clean.slice(20)}`;
+            keySet.add(formatted);
+          }
+        }
+      }
+    }
+
+    const candidateKeys = Array.from(keySet);
     const sessionKey = candidateKeys[0] || null;
 
     // Resolve shop domain

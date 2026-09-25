@@ -77,34 +77,77 @@
     return false;
   }
 
-  function getCid() {
-    try {
-      if (window.Shopify && window.Shopify.clientId) {
-        return String(window.Shopify.clientId).replace(/^["']+|["']+$/g, "").trim();
+  function getAllCandidateIds() {
+    var ids = [];
+    function add(val) {
+      if (!val) return;
+      var clean = String(val).replace(/^["']+|["']+$/g, "").trim();
+      if (clean && clean.length >= 6 && ids.indexOf(clean) === -1) {
+        ids.push(clean);
       }
+    }
+
+    try {
+      if (window.Shopify && window.Shopify.clientId) add(window.Shopify.clientId);
+    } catch (e) {}
+    try {
+      if (window.ShopifyAnalytics && window.ShopifyAnalytics.lib && typeof window.ShopifyAnalytics.lib.user === "function") {
+        var u = window.ShopifyAnalytics.lib.user();
+        if (u) {
+          if (typeof u.anonymousId === "function") add(u.anonymousId());
+          if (typeof u.id === "function") add(u.id());
+        }
+      }
+    } catch (e) {}
+
+    try {
+      var metaY = document.querySelector('meta[name="shopify-y"]');
+      if (metaY) add(metaY.getAttribute("content"));
+      var metaS = document.querySelector('meta[name="shopify-s"]');
+      if (metaS) add(metaS.getAttribute("content"));
+      var metaFeatures = document.getElementById("shopify-features");
+      if (metaFeatures) {
+        var featText = metaFeatures.getAttribute("content") || metaFeatures.innerText || "";
+        var yMatch = featText.match(/_shopify_y\s*[:=]\s*["']?([^"',\s]+)/i);
+        if (yMatch) add(yMatch[1]);
+      }
+    } catch (e) {}
+
+    try {
       var c = document.cookie.split(";");
       for (var i = 0; i < c.length; i++) {
         var s = c[i].trim();
-        if (s.indexOf("_shopify_y=") === 0) {
-          return decodeURIComponent(s.substring(11)).replace(/^["']+|["']+$/g, "").trim();
-        }
+        if (s.indexOf("_shopify_y=") === 0) add(decodeURIComponent(s.substring(11)));
+        else if (s.indexOf("_shopify_s=") === 0) add(decodeURIComponent(s.substring(11)));
+        else if (s.indexOf("_y=") === 0) add(decodeURIComponent(s.substring(3)));
+        else if (s.indexOf("_s=") === 0) add(decodeURIComponent(s.substring(3)));
+        else if (s.indexOf("traffiq_client_id=") === 0) add(decodeURIComponent(s.substring(18)));
+        else if (s.indexOf("cart=") === 0) add(decodeURIComponent(s.substring(5)));
       }
-      for (var j = 0; j < c.length; j++) {
-        var s2 = c[j].trim();
-        if (s2.indexOf("_shopify_s=") === 0) {
-          return decodeURIComponent(s2.substring(11)).replace(/^["']+|["']+$/g, "").trim();
-        }
-      }
-      if (window.localStorage) {
-        var localY = window.localStorage.getItem("_shopify_y") || window.localStorage.getItem("traffiq_client_id");
-        if (localY) return String(localY).replace(/^["']+|["']+$/g, "").trim();
-      }
-      if (window.sessionStorage) {
-        var sessY = window.sessionStorage.getItem("_shopify_y") || window.sessionStorage.getItem("traffiq_client_id");
-        if (sessY) return String(sessY).replace(/^["']+|["']+$/g, "").trim();
-      }
+    } catch (e) {}
 
-      // Generate and store persistent visitor ID across cookies and storage
+    try {
+      if (window.localStorage) {
+        add(window.localStorage.getItem("_shopify_y"));
+        add(window.localStorage.getItem("_shopify_s"));
+        add(window.localStorage.getItem("traffiq_client_id"));
+      }
+    } catch (e) {}
+    try {
+      if (window.sessionStorage) {
+        add(window.sessionStorage.getItem("_shopify_y"));
+        add(window.sessionStorage.getItem("_shopify_s"));
+        add(window.sessionStorage.getItem("traffiq_client_id"));
+      }
+    } catch (e) {}
+
+    return ids;
+  }
+
+  function getCid() {
+    try {
+      var all = getAllCandidateIds();
+      if (all && all.length > 0) return all[0];
       var genId = "tqc_" + Math.random().toString(36).slice(2) + Date.now().toString(36);
       try {
         if (window.localStorage) window.localStorage.setItem("traffiq_client_id", genId);
@@ -117,6 +160,8 @@
 
   function getSid() {
     try {
+      var metaS = document.querySelector('meta[name="shopify-s"]');
+      if (metaS && metaS.getAttribute("content")) return metaS.getAttribute("content").trim();
       var c = document.cookie.split(";");
       for (var j = 0; j < c.length; j++) {
         var s2 = c[j].trim();
@@ -129,12 +174,14 @@
   }
 
   function initProtection(endpoint) {
-    var cid = getCid();
+    var candidates = getAllCandidateIds();
+    var cid = candidates[0] || getCid();
     var sid = getSid();
     var isTest = window.location.search.indexOf("test_challenge") !== -1 || window.location.search.indexOf("simulate_high_severity") !== -1;
     var q = endpoint + "/api/protection/status?shop=" + encodeURIComponent(shop) +
       (cid ? "&clientId=" + encodeURIComponent(cid) : "") +
       (sid ? "&sessionKey=" + encodeURIComponent(sid) : "") +
+      (candidates.length ? "&candidates=" + encodeURIComponent(candidates.join(",")) : "") +
       (isTest ? "&test_challenge=1" : "");
 
     currentStatusPromise = fetch(q, {
@@ -155,7 +202,7 @@
             localStorage.setItem(BLOCKED_KEY, "true");
             sessionStorage.removeItem(KEY);
           } catch (e) {}
-          console.log("[Traffiq Protection] 🛑 Hard Block Active (" + (d.reason || d.severity) + "). Checkout & cart access restricted.");
+          console.log("[Traffiq Protection] 🛑 Hard Block Active (" + (d.reason || d.severity) + "). Restricted modal active.");
           showModal();
         } else if (d && d.challengeRequired) {
           try {
@@ -560,17 +607,41 @@
         return Promise.reject(new Error("Traffiq: Action blocked by security policy"));
       }
 
-      if (activeProtectionMode === "CHALLENGE" && isArmed) {
-        var verified = false;
-        try { verified = sessionStorage.getItem(KEY) === "true"; } catch (e) {}
-        if (!verified) {
-          console.log("[Traffiq Protection] Intercepted fetch for challenge verification:", url);
-          return new Promise(function (res, rej) {
-            pending = { type: "fetch", args: args, res: res, rej: rej, orig: origFetch };
-            showModal();
-          });
+      // Check protection status before allowing cart/checkout action
+      return initProtection(appUrl).then(function (d) {
+        if (d && (d.blockRequired || d.isManuallyBlocked)) {
+          console.log("[Traffiq Protection] 🛑 Fetch cart blocked after server status check:", url);
+          activeProtectionMode = "BLOCK";
+          isArmed = true;
+          try {
+            sessionStorage.setItem(BLOCKED_KEY, "true");
+            localStorage.setItem(BLOCKED_KEY, "true");
+            sessionStorage.removeItem(KEY);
+          } catch (e) {}
+          showModal();
+          return Promise.reject(new Error("Traffiq: Action blocked by security policy"));
         }
-      }
+
+        if (d && d.challengeRequired) {
+          var verified = false;
+          try { verified = sessionStorage.getItem(KEY) === "true"; } catch (e) {}
+          if (!verified) {
+            console.log("[Traffiq Protection] Intercepted fetch for challenge verification:", url);
+            return new Promise(function (res, rej) {
+              pending = { type: "fetch", args: args, res: res, rej: rej, orig: origFetch };
+              showModal();
+            });
+          }
+        }
+
+        return origFetch.apply(window, args);
+      }).catch(function () {
+        if (isCurrentlyBlocked()) {
+          showModal();
+          return Promise.reject(new Error("Traffiq: Action blocked by security policy"));
+        }
+        return origFetch.apply(window, args);
+      });
     }
 
     return origFetch.apply(this, args);
@@ -834,6 +905,9 @@
   function showModal() {
     var m = getModal();
     if (!m) return;
+    if (!m.parentNode) {
+      (document.body || document.documentElement).appendChild(m);
+    }
     if (m._reset) m._reset();
     m.classList.add("tq-active");
     m.style.setProperty("display", "flex", "important");
@@ -841,6 +915,10 @@
     m.style.setProperty("visibility", "visible", "important");
     m.style.setProperty("pointer-events", "auto", "important");
     m.style.setProperty("z-index", "2147483647", "important");
+    try {
+      document.documentElement.style.setProperty("overflow", "hidden", "important");
+      if (document.body) document.body.style.setProperty("overflow", "hidden", "important");
+    } catch (e) {}
   }
 
   function hideModal() {
@@ -852,6 +930,10 @@
       m.style.setProperty("visibility", "hidden", "important");
       m.style.setProperty("pointer-events", "none", "important");
     }
+    try {
+      document.documentElement.style.removeProperty("overflow");
+      if (document.body) document.body.style.removeProperty("overflow");
+    } catch (e) {}
   }
 
   function resume() {
