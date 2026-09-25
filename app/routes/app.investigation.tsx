@@ -880,7 +880,6 @@ export default function TrafficInvestigation() {
                   <th>Traffic Type</th>
                   <th>Risk Score</th>
                   <th>Risk Level</th>
-                  <th>Activity</th>
                   <th>Source</th>
                   <th>Country</th>
                   <th>Time</th>
@@ -890,7 +889,7 @@ export default function TrafficInvestigation() {
               <tbody>
                 {sessions.length === 0 ? (
                   <tr>
-                    <td colSpan={9} style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--tq-text-muted)" }}>
+                    <td colSpan={8} style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--tq-text-muted)" }}>
                       No sessions found matching your active filters.
                     </td>
                   </tr>
@@ -974,28 +973,6 @@ export default function TrafficInvestigation() {
                           <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.825rem", fontWeight: 500, whiteSpace: "nowrap" }}>
                             <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: dotColor }}></span>
                             <span>{session.riskLevel}</span>
-                          </span>
-                        </td>
-                        <td>
-                          <span style={{
-                            display: "inline-flex",
-                            alignItems: "center",
-                            gap: "0.25rem",
-                            fontSize: "0.775rem",
-                            fontWeight: 600,
-                            color: (session.addToCartCount || 0) > 0 ? "var(--tq-primary)" : "var(--tq-text-muted)",
-                            whiteSpace: "nowrap",
-                            background: "var(--tq-bg)",
-                            padding: "0.15rem 0.45rem",
-                            borderRadius: "6px",
-                            border: "1px solid var(--tq-border)",
-                          }}>
-                            <span>{session.pageViews || 1}p</span>
-                            {(session.addToCartCount || 0) > 0 && (
-                              <span style={{ color: "var(--tq-primary)", fontWeight: 700 }}>
-                                • {session.addToCartCount}🛒
-                              </span>
-                            )}
                           </span>
                         </td>
                         <td style={{ color: "var(--tq-text-muted)" }}>{session.source}</td>
