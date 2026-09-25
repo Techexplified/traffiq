@@ -228,20 +228,6 @@ export default function AlertsPage() {
           <h1>Alerts</h1>
           <p>Real-time security and traffic anomaly alerts driven by live store telemetry.</p>
         </div>
-
-        <div className="tq-controls-group">
-          <select
-            className="tq-dropdown"
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-          >
-            <option value="All Time">📅 All Time</option>
-            <option value="Today">📅 Today</option>
-            <option value="Yesterday">📅 Yesterday</option>
-            <option value="Last 7 Days">📅 Last 7 Days</option>
-            <option value="Last 30 Days">📅 Last 30 Days</option>
-          </select>
-        </div>
       </div>
 
       {/* Top 4 KPI Cards (Database-driven stats) */}

@@ -82,26 +82,6 @@ export default function ImpactAndSources() {
           <h1>Impact &amp; Sources</h1>
           <p>Understand how suspicious traffic is affecting your metrics and where it's coming from.</p>
         </div>
-
-        <div className="tq-controls-group">
-          <select
-            className="tq-dropdown"
-            value={dateRange}
-            onChange={(e) => setDateRange(e.target.value)}
-          >
-            <option value="May 12 - May 18, 2025">📅 May 12 – May 18, 2025</option>
-            <option value="Last 30 Days">📅 Last 30 Days</option>
-          </select>
-
-          <select
-            className="tq-dropdown"
-            value={compareRange}
-            onChange={(e) => setCompareRange(e.target.value)}
-          >
-            <option value="May 5 - May 11, 2025">Compare to: May 5 – May 11, 2025</option>
-            <option value="Previous Period">Compare to: Previous Period</option>
-          </select>
-        </div>
       </div>
 
       {/* Top Grid: Business Impact + AI Insights (Screenshot 4 exact match) */}
