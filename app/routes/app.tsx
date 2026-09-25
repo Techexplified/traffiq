@@ -33,7 +33,7 @@ export default function App() {
         <Link to="/app" rel="home">Traffic Truth</Link>
         <Link to="/app/investigation">Traffic Investigation</Link>
         <Link to="/app/impact">Impact &amp; Sources</Link>
-        <Link to="/app/alerts">Alerts (3)</Link>
+        <Link to="/app/alerts">Alerts</Link>
         <Link to="/app/settings">Settings</Link>
       </NavMenu>
 
