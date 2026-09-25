@@ -440,6 +440,8 @@ export default function TrafficInvestigation() {
   const isInitialMount = useRef(true);
   const selectedSessionRef = useRef<ScoredSession | null>(selectedSession);
   selectedSessionRef.current = selectedSession;
+  const drawerOpenRef = useRef(drawerOpen);
+  drawerOpenRef.current = drawerOpen;
 
   // Fetch list of sessions from GET /api/traffic/sessions
   const fetchSessions = useCallback(async (silent = false) => {
@@ -474,6 +476,39 @@ export default function TrafficInvestigation() {
           setTotalCount(data.totalCount ?? data.sessions.length);
 
           const currentSelected = selectedSessionRef.current;
+          // Keep selected session updated with latest pageViews and cart adds
+          if (currentSelected) {
+            const updated = data.sessions.find((s: ScoredSession) => s.id === currentSelected.id);
+            if (updated) {
+              setSelectedSession((prev) => (prev ? {
+                ...prev,
+                pageViews: updated.pageViews,
+                addToCartCount: updated.addToCartCount,
+                checkoutStarted: updated.checkoutStarted,
+                lastSeenAt: updated.lastSeenAt,
+                time: updated.time,
+                botScore: updated.botScore,
+                riskScore: updated.riskScore,
+                riskLevel: updated.riskLevel,
+                isBlocked: updated.isBlocked,
+                isManuallyBlocked: updated.isManuallyBlocked,
+                isFlagged: updated.isFlagged,
+                sessionTimeline: updated.sessionTimeline || prev.sessionTimeline,
+              } : updated));
+
+              // If drawer is open, silently fetch latest event timeline
+              if (drawerOpenRef.current) {
+                fetch(`/api/traffic/sessions/${encodeURIComponent(currentSelected.id)}?shop=${encodeURIComponent(shopDomain)}${browserTz ? `&tz=${encodeURIComponent(browserTz)}` : ""}&_t=${Date.now()}`)
+                  .then((r) => (r.ok ? r.json() : null))
+                  .then((d) => {
+                    if (d?.session) {
+                      setSelectedSession(d.session);
+                    }
+                  })
+                  .catch(() => {});
+              }
+            }
+          }
           // If currently selected session is not in returned list, select the first
           if (data.sessions.length > 0 && (!currentSelected || !data.sessions.some((s: ScoredSession) => s.id === currentSelected.id))) {
             loadSessionDetail(data.sessions[0].id, data.sessions[0]);
@@ -510,7 +545,7 @@ export default function TrafficInvestigation() {
 
     try {
       const browserTz = typeof Intl !== "undefined" ? Intl.DateTimeFormat().resolvedOptions().timeZone : "";
-      const res = await fetch(`/api/traffic/sessions/${encodeURIComponent(sessionId)}?shop=${encodeURIComponent(shopDomain)}${browserTz ? `&tz=${encodeURIComponent(browserTz)}` : ""}`);
+      const res = await fetch(`/api/traffic/sessions/${encodeURIComponent(sessionId)}?shop=${encodeURIComponent(shopDomain)}${browserTz ? `&tz=${encodeURIComponent(browserTz)}` : ""}&_t=${Date.now()}`);
       if (res.ok) {
         const data = await res.json();
         if (data.session) {
@@ -722,6 +757,28 @@ export default function TrafficInvestigation() {
               <option value="riskScore_desc">Sort: Highest Risk</option>
               <option value="riskScore_asc">Sort: Lowest Risk</option>
             </select>
+
+            <button
+              onClick={() => fetchSessions(false)}
+              className="tq-btn tq-btn-secondary"
+              style={{
+                flexShrink: 0,
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "0.35rem",
+                padding: "0.4rem 0.75rem",
+                fontSize: "0.8rem",
+                fontWeight: 600,
+                borderRadius: "8px",
+                border: "1px solid var(--tq-border)",
+                background: "#ffffff",
+                cursor: "pointer",
+              }}
+              title="Refresh sessions list and live activity"
+            >
+              <span>⟳</span>
+              <span>Refresh</span>
+            </button>
           </div>
 
           {/* Dynamic Filter Pills Row (Strictly single row across all 5 types) */}
@@ -823,6 +880,7 @@ export default function TrafficInvestigation() {
                   <th>Traffic Type</th>
                   <th>Risk Score</th>
                   <th>Risk Level</th>
+                  <th>Activity</th>
                   <th>Source</th>
                   <th>Country</th>
                   <th>Time</th>
@@ -832,7 +890,7 @@ export default function TrafficInvestigation() {
               <tbody>
                 {sessions.length === 0 ? (
                   <tr>
-                    <td colSpan={8} style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--tq-text-muted)" }}>
+                    <td colSpan={9} style={{ textAlign: "center", padding: "2.5rem 1rem", color: "var(--tq-text-muted)" }}>
                       No sessions found matching your active filters.
                     </td>
                   </tr>
@@ -916,6 +974,28 @@ export default function TrafficInvestigation() {
                           <span style={{ display: "inline-flex", alignItems: "center", gap: "0.35rem", fontSize: "0.825rem", fontWeight: 500, whiteSpace: "nowrap" }}>
                             <span style={{ width: "7px", height: "7px", borderRadius: "50%", background: dotColor }}></span>
                             <span>{session.riskLevel}</span>
+                          </span>
+                        </td>
+                        <td>
+                          <span style={{
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "0.25rem",
+                            fontSize: "0.775rem",
+                            fontWeight: 600,
+                            color: (session.addToCartCount || 0) > 0 ? "var(--tq-primary)" : "var(--tq-text-muted)",
+                            whiteSpace: "nowrap",
+                            background: "var(--tq-bg)",
+                            padding: "0.15rem 0.45rem",
+                            borderRadius: "6px",
+                            border: "1px solid var(--tq-border)",
+                          }}>
+                            <span>{session.pageViews || 1}p</span>
+                            {(session.addToCartCount || 0) > 0 && (
+                              <span style={{ color: "var(--tq-primary)", fontWeight: 700 }}>
+                                • {session.addToCartCount}🛒
+                              </span>
+                            )}
                           </span>
                         </td>
                         <td style={{ color: "var(--tq-text-muted)" }}>{session.source}</td>

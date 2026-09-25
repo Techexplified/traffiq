@@ -5,8 +5,8 @@ import { getShopByDomain } from "../services/shop.server";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS, HEAD",
+  "Access-Control-Allow-Headers": "*",
 };
 
 // 9 Supported customer events from Shopify Web Pixel
@@ -45,7 +45,7 @@ function isRateLimited(key: string, limit = 120, windowMs = 60000): boolean {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   if (request.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
   return new Response(
     JSON.stringify({
@@ -61,7 +61,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (request.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, { status: 204, headers: corsHeaders });
   }
 
   if (request.method !== "POST") {
@@ -88,7 +88,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    const rawBody = (await request.json()) as Record<string, unknown>;
+    let rawBody: Record<string, unknown> = {};
+    try {
+      rawBody = (await request.json()) as Record<string, unknown>;
+    } catch {
+      try {
+        const text = await request.text();
+        rawBody = JSON.parse(text);
+      } catch {
+        rawBody = {};
+      }
+    }
 
     // 2. Validate Event Type
     const eventType = String(rawBody.eventType || "");
@@ -187,7 +197,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
-    // Short-window debounce (2 seconds) to prevent rapid duplicate double-clicks from storefront
+    // Short-window debounce (400ms) to prevent accidental double-clicks from storefront
     const sessionKeyCandidate =
       typeof rawBody.clientId === "string" && rawBody.clientId
         ? rawBody.clientId
@@ -195,13 +205,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         ? rawBody.sessionId
         : `anon_${clientIp.replace(/[^a-zA-Z0-9]/g, "_")}`;
 
-    const twoSecondsAgo = new Date(Date.now() - 2000);
+    const debounceWindowAgo = new Date(Date.now() - 400);
     const recentDuplicate = await prisma.trafficEvent.findFirst({
       where: {
         shopId: shop.id,
         eventType,
         pageUrl: typeof rawBody.page === "string" ? rawBody.page : "/",
-        timestamp: { gte: twoSecondsAgo },
+        timestamp: { gte: debounceWindowAgo },
         session: {
           sessionKey: sessionKeyCandidate,
         },
@@ -209,7 +219,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     if (recentDuplicate) {
-      console.log(`[Ingestion] Debounced duplicate event (${eventType}) within 2s for ${sessionKeyCandidate}`);
+      console.log(`[Ingestion] Debounced rapid duplicate event (${eventType}) within 400ms for ${sessionKeyCandidate}`);
       return new Response(
         JSON.stringify({
           success: true,
@@ -255,6 +265,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       referrer: typeof rawBody.referrer === "string" ? rawBody.referrer : "",
       productId: typeof rawBody.productId === "string" ? rawBody.productId : undefined,
       variantId: typeof rawBody.variantId === "string" ? rawBody.variantId : undefined,
+      quantity: typeof rawBody.quantity === "number" || typeof rawBody.quantity === "string" ? rawBody.quantity : undefined,
       totalCost: typeof rawBody.totalCost === "number" || typeof rawBody.totalCost === "string" ? rawBody.totalCost : undefined,
       utm: (rawBody.utm as { source?: string; medium?: string; campaign?: string }) || {},
       metadata,

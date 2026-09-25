@@ -32,6 +32,7 @@ export interface IngestionEventPayload {
   referrer?: string;
   productId?: string;
   variantId?: string;
+  quantity?: number | string;
   totalCost?: number | string;
   utm?: {
     source?: string;
@@ -321,6 +322,15 @@ export async function processIngestionEvent(
   const utmSource = payload.utm?.source || (payload.referrer && !payload.referrer.includes(payload.shopDomain || "") ? "Referral" : "Direct");
   const cost = payload.totalCost ? Number(payload.totalCost) : 0;
 
+  const isAddToCart = payload.eventType === "product_added_to_cart";
+  const addedQuantity = isAddToCart ? Math.max(1, Number(payload.quantity || (payload.metadata as any)?.quantity || 1)) : 0;
+
+  const isPageViewCandidate =
+    payload.eventType === "page_viewed" ||
+    payload.eventType === "collection_viewed" ||
+    payload.eventType === "product_viewed" ||
+    payload.eventType === "cart_viewed";
+
   if (!session) {
     // Check if this visitor/sessionKey was previously manually blocked by merchant
     const wasManuallyBlocked = await prisma.protectionAction.findFirst({
@@ -355,11 +365,11 @@ export async function processIngestionEvent(
         utmSource,
         utmMedium: payload.utm?.medium,
         utmCampaign: payload.utm?.campaign,
-        pageViews: payload.eventType === "page_viewed" ? 1 : 0,
+        pageViews: isPageViewCandidate ? 1 : 0,
         requestCount: 1,
         productViews: payload.eventType === "product_viewed" ? 1 : 0,
         searches: payload.eventType === "search_submitted" ? 1 : 0,
-        addToCartCount: payload.eventType === "product_added_to_cart" ? 1 : 0,
+        addToCartCount: addedQuantity,
         checkoutStarted: payload.eventType === "checkout_started",
         purchaseCompleted: payload.eventType === "purchase",
         totalSpend: cost,
@@ -377,6 +387,24 @@ export async function processIngestionEvent(
     // Run debounced background retention cleanup check
     triggerBackgroundRetentionCleanup(shopId);
   } else {
+    // Determine whether this page view should increment pageViews
+    // (avoid double-counting when page_viewed and product_viewed or collection_viewed fire simultaneously on the same page)
+    let shouldIncrementPageView = false;
+    if (isPageViewCandidate) {
+      const threeSecondsAgo = new Date(eventTime.getTime() - 3000);
+      const recentPageEvent = await prisma.trafficEvent.findFirst({
+        where: {
+          sessionId: session.id,
+          eventType: { in: ["page_viewed", "collection_viewed", "product_viewed", "cart_viewed"] },
+          pageUrl: payload.page || "/",
+          timestamp: { gte: threeSecondsAgo },
+        },
+      });
+      if (!recentPageEvent) {
+        shouldIncrementPageView = true;
+      }
+    }
+
     // Update existing TrafficSession
     session = await prisma.trafficSession.update({
       where: { id: session.id },
@@ -384,10 +412,10 @@ export async function processIngestionEvent(
         lastSeenAt: eventTime,
         exitPage: payload.page || session.exitPage,
         requestCount: { increment: 1 },
-        pageViews: payload.eventType === "page_viewed" ? { increment: 1 } : undefined,
+        pageViews: shouldIncrementPageView ? { increment: 1 } : undefined,
         productViews: payload.eventType === "product_viewed" ? { increment: 1 } : undefined,
         searches: payload.eventType === "search_submitted" ? { increment: 1 } : undefined,
-        addToCartCount: payload.eventType === "product_added_to_cart" ? { increment: 1 } : undefined,
+        addToCartCount: isAddToCart ? { increment: addedQuantity } : undefined,
         checkoutStarted: payload.eventType === "checkout_started" ? true : session.checkoutStarted,
         purchaseCompleted: payload.eventType === "purchase" ? true : session.purchaseCompleted,
         totalSpend: cost > 0 ? { increment: cost } : undefined,

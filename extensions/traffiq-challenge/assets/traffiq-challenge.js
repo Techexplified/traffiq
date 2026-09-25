@@ -276,8 +276,8 @@
       var now = Date.now();
       var extra = extraData || {};
       var dedupeKey = eventType + "_" + (extra.variantId || extra.productId || window.location.pathname);
-      if (lastReportedEvents[dedupeKey] && now - lastReportedEvents[dedupeKey] < 1800) {
-        return; // Client-side 1.8s debounce
+      if (lastReportedEvents[dedupeKey] && now - lastReportedEvents[dedupeKey] < 500) {
+        return; // Client-side 500ms debounce
       }
       lastReportedEvents[dedupeKey] = now;
 
@@ -327,16 +327,21 @@
 
       var body = JSON.stringify(payload);
 
-      if (navigator.sendBeacon) {
-        navigator.sendBeacon(targetUrl, new Blob([body], { type: "application/json" }));
-      } else if (typeof fetch === "function") {
+      // Primary transport: fetch with keepalive & CORS
+      if (typeof fetch === "function") {
         fetch(targetUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: body,
           keepalive: true,
           mode: "cors",
-        }).catch(function () {});
+        }).catch(function () {
+          if (navigator.sendBeacon) {
+            navigator.sendBeacon(targetUrl, body);
+          }
+        });
+      } else if (navigator.sendBeacon) {
+        navigator.sendBeacon(targetUrl, body);
       }
     } catch (e) {
       // Non-blocking fail-safe
@@ -367,7 +372,27 @@
     reportStorefrontEvent("product_viewed", extractCartProductDetails(document));
   } else if (window.location.pathname.indexOf("/collections/") !== -1) {
     reportStorefrontEvent("collection_viewed");
+  } else if (window.location.pathname.indexOf("/cart") !== -1) {
+    reportStorefrontEvent("cart_viewed");
   }
+
+  // Detect SPA client-side transitions
+  var lastReportedPath = window.location.pathname;
+  function handleUrlChange() {
+    if (window.location.pathname !== lastReportedPath) {
+      lastReportedPath = window.location.pathname;
+      reportStorefrontEvent("page_viewed");
+      if (window.location.pathname.indexOf("/products/") !== -1) {
+        reportStorefrontEvent("product_viewed", extractCartProductDetails(document));
+      } else if (window.location.pathname.indexOf("/collections/") !== -1) {
+        reportStorefrontEvent("collection_viewed");
+      } else if (window.location.pathname.indexOf("/cart") !== -1) {
+        reportStorefrontEvent("cart_viewed");
+      }
+    }
+  }
+  window.addEventListener("popstate", handleUrlChange);
+  window.addEventListener("hashchange", handleUrlChange);
 
   // Auto-refresh protection status when tab regains focus (e.g. merchant blocked session in Admin tab)
   document.addEventListener("visibilitychange", function () {
@@ -479,40 +504,30 @@
           showModal();
         } else {
           lastSafeCheckTime = Date.now();
+          var isAddBtn = (btn.name === "add") ||
+            (btn.getAttribute && btn.getAttribute("name") === "add") ||
+            (btn.classList && (btn.classList.contains("add-to-cart") || btn.classList.contains("product-form__submit"))) ||
+            (btn.closest && (btn.closest('[data-add-to-cart]') || btn.closest('form[action*="/cart/add"]')));
+          if (isAddBtn) {
+            reportStorefrontEvent("product_added_to_cart", extractCartProductDetails(btn));
+          }
           resume();
         }
       } else {
         lastSafeCheckTime = Date.now();
+        var isAddBtn2 = (btn.name === "add") ||
+          (btn.getAttribute && btn.getAttribute("name") === "add") ||
+          (btn.classList && (btn.classList.contains("add-to-cart") || btn.classList.contains("product-form__submit"))) ||
+          (btn.closest && (btn.closest('[data-add-to-cart]') || btn.closest('form[action*="/cart/add"]')));
+        if (isAddBtn2) {
+          reportStorefrontEvent("product_added_to_cart", extractCartProductDetails(btn));
+        }
         resume();
       }
     }).catch(function () {
       resume();
     });
     return false;
-
-    if (activeProtectionMode === "CHALLENGE" && isArmed) {
-      var verified = false;
-      try { verified = sessionStorage.getItem(KEY) === "true"; } catch (err) {}
-      if (!verified) {
-        console.log("[Traffiq Protection] Challenge required before Add to Cart.");
-        e.preventDefault();
-        e.stopPropagation();
-        e.stopImmediatePropagation();
-        pending = { type: "click", el: btn };
-        showModal();
-        return false;
-      }
-    }
-
-    // Telemetry: report add-to-cart on valid button click
-    var isAddBtn = (btn.name === "add") ||
-      (btn.getAttribute && btn.getAttribute("name") === "add") ||
-      (btn.classList && (btn.classList.contains("add-to-cart") || btn.classList.contains("product-form__submit"))) ||
-      (btn.closest && (btn.closest('[data-add-to-cart]') || btn.closest('form[action*="/cart/add"]')));
-
-    if (isAddBtn && !isCurrentlyBlocked()) {
-      reportStorefrontEvent("product_added_to_cart", extractCartProductDetails(btn));
-    }
   }, true);
 
   // Intercept Form Submit events in Capture Phase

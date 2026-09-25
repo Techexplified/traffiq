@@ -1253,7 +1253,7 @@ export class AnalyticsService {
 
     const sessions: ScoredSession[] = dbSessions.map((s) => {
       const formatted = AnalyticsService.formatScoredSession(s, options?.timeZone);
-      sessionDetailCache.set(`detail_${shopId}_${s.id}_${options?.timeZone || ""}`, { data: formatted, expiresAt: Date.now() + 60000 });
+      sessionDetailCache.set(`detail_${shopId}_${s.id}_${options?.timeZone || ""}`, { data: formatted, expiresAt: Date.now() + 5000 });
       return formatted;
     });
 
@@ -1623,7 +1623,7 @@ export class AnalyticsService {
       } catch {}
     }
 
-    sessionDetailCache.set(cacheKey, { data: detailResult, expiresAt: Date.now() + 60000 });
+    sessionDetailCache.set(cacheKey, { data: detailResult, expiresAt: Date.now() + 5000 });
     return detailResult;
   }
 
@@ -1746,7 +1746,11 @@ export class AnalyticsService {
     investigationSessionsCache.clear();
     overviewCache.clear();
     if (sessionId) {
-      sessionDetailCache.delete(`detail_${shopId}_${sessionId}`);
+      for (const key of sessionDetailCache.keys()) {
+        if (key.includes(sessionId)) {
+          sessionDetailCache.delete(key);
+        }
+      }
     } else {
       sessionDetailCache.clear();
     }
